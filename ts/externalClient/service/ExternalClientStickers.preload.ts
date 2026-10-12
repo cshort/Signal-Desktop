@@ -55,10 +55,21 @@ export function getStickerPacks(): ServiceResultType {
 }
 
 // Only stickers the picker offers: from installed packs, or recently used.
-function findPickerSticker(packId: string, stickerId: number) {
+// A pack's cover may be a picture of its own, shown only as its tab.
+function findPickerSticker(
+  packId: string,
+  stickerId: number,
+  { allowCover }: { allowCover: boolean }
+) {
   const pack = getStickerPack(packId);
   const sticker = getSticker(packId, stickerId);
-  if (!pack || !sticker?.path || sticker.isCoverOnly) {
+  if (!pack || !sticker?.path) {
+    return undefined;
+  }
+  if (
+    sticker.isCoverOnly &&
+    !(allowCover && pack.coverStickerId === stickerId)
+  ) {
     return undefined;
   }
   const state = window.reduxStore.getState();
@@ -75,7 +86,7 @@ export async function getStickerImage({
   stickerId,
   width,
 }: StickersGetImageParamsType): Promise<ServiceResultType> {
-  const found = findPickerSticker(packId, stickerId);
+  const found = findPickerSticker(packId, stickerId, { allowCover: true });
   if (!found) {
     return notFound;
   }
@@ -106,7 +117,7 @@ export async function sendSticker({
   if (!model) {
     return notFound;
   }
-  if (!findPickerSticker(packId, stickerId)) {
+  if (!findPickerSticker(packId, stickerId, { allowCover: false })) {
     return { ok: false, code: ErrorCode.InvalidArgument };
   }
   const reason = await getSendBlockReason(model, '');

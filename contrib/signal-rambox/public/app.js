@@ -1778,7 +1778,19 @@ async function openStickerPicker(anchorElement) {
     if (source.pack) {
       const cover = source.pack.coverStickerId ?? source.stickers[0]?.id;
       if (cover !== undefined) {
-        tab.append(stickerImage(source.pack.id, cover, 28, source.title));
+        const img = stickerImage(source.pack.id, cover, 28, '');
+        // A cover Signal hasn't fetched yet: the first sticker instead.
+        const first = source.stickers[0]?.id;
+        img.addEventListener(
+          'error',
+          () => {
+            if (first !== undefined && first !== cover) {
+              img.src = stickerImageUrl(source.pack.id, first, 28);
+            }
+          },
+          { once: true }
+        );
+        tab.append(img);
       }
     } else {
       tab.append(icon('cat-recent'));
