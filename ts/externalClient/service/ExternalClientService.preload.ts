@@ -37,6 +37,11 @@ import {
   votePoll,
 } from './ExternalClientOutgoing.preload.ts';
 import { getMembers } from './ExternalClientMentions.preload.ts';
+import {
+  getStickerImage,
+  getStickerPacks,
+  sendSticker,
+} from './ExternalClientStickers.preload.ts';
 import { markRead, sendText } from './ExternalClientSend.preload.ts';
 import {
   getDtoContext,
@@ -335,6 +340,21 @@ async function dispatch(
       }
       const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
       return params.success ? sendPoll(params.data) : invalid;
+    }
+    case Method.StickersGetPacks: {
+      const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
+      return params.success ? getStickerPacks() : invalid;
+    }
+    case Method.StickersGetImage: {
+      const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
+      return params.success ? getStickerImage(params.data) : invalid;
+    }
+    case Method.MessagesSendSticker: {
+      if (!window.ConversationController.isInitialFetchComplete()) {
+        return notReady;
+      }
+      const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
+      return params.success ? sendSticker(params.data) : invalid;
     }
     default:
       throw new Error(`Unhandled external client method ${method}`);

@@ -144,6 +144,8 @@ const ICONS = {
   search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM16 16l4.5 4.5',
   file: 'M6 3h8l4 4v14H6zM14 3v4h4',
   poll: 'M5 20V11M12 20V4M19 20v-6',
+  sticker:
+    'M20 12V8a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v8a4 4 0 0 0 4 4h4m8-8-8 8m8-8h-4a4 4 0 0 0-4 4v4',
   'cat-recent': 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3 2',
   'cat-smileys':
     'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM8.5 14s1.3 2 3.5 2 3.5-2 3.5-2M9 9.5h.01M15 9.5h.01',
@@ -1436,6 +1438,7 @@ function closePopovers() {
   $('reaction-viewer').hidden = true;
   $('mention-picker').hidden = true;
   $('format-menu').hidden = true;
+  $('sticker-picker').hidden = true;
 }
 
 // anchor: an element, or a rect taken before its element was hidden.
@@ -1663,6 +1666,143 @@ async function openEmojiPicker(anchorElement, onPick) {
   picker.replaceChildren(search, body, tabs);
   placePopover(picker, anchor);
   search.focus();
+}
+
+// --- stickers -------------------------------------------------------------------
+
+// As Signal's sticker picker: Recently used, then each installed pack, and a
+// sticker is sent as soon as it is picked.
+const STICKER_CELL_PX = 72;
+let stickerTab = null;
+
+function stickerImageUrl(packId, stickerId, size) {
+  const params = new URLSearchParams({
+    packId,
+    stickerId: String(stickerId),
+    width: String(Math.round(size * (window.devicePixelRatio || 1))),
+  });
+  return `api/stickerImage?${params}`;
+}
+
+function stickerImage(packId, stickerId, size, label) {
+  const img = el('img', 'sticker-img');
+  img.loading = 'lazy';
+  img.alt = label ?? '';
+  img.src = stickerImageUrl(packId, stickerId, size);
+  return img;
+}
+
+async function sendSticker(packId, stickerId) {
+  const conversationId = selectedId;
+  if (!conversationId) {
+    return;
+  }
+  closePopovers();
+  $('send-error').hidden = true;
+  try {
+    await api('api/sendSticker', { conversationId, packId, stickerId });
+    $('messages').scrollTop = $('messages').scrollHeight;
+  } catch (error) {
+    showError(
+      SEND_ERRORS[error.reason] ?? `Not sent (${error.code ?? error.message}).`
+    );
+  }
+}
+
+async function openStickerPicker(anchorElement) {
+  const anchor = anchorElement.getBoundingClientRect();
+  let data;
+  try {
+    data = await api('api/stickers');
+  } catch (error) {
+    toast(`Couldn't load stickers (${error.code ?? error.message}).`);
+    return;
+  }
+  closePopovers();
+  const picker = $('sticker-picker');
+  const tabs = el('div', 'sticker-tabs');
+  const title = el('div', 'emoji-section-title');
+  const grid = el('div', 'sticker-grid');
+  const body = el('div', 'emoji-body');
+  body.append(title, grid);
+
+  const sources = [];
+  if (data.recents.length > 0) {
+    sources.push({
+      key: 'recent',
+      title: 'Recently used',
+      stickers: data.recents.map(r => ({
+        packId: r.packId,
+        id: r.stickerId,
+        emoji: r.emoji,
+      })),
+    });
+  }
+  for (const pack of data.packs) {
+    sources.push({
+      key: pack.id,
+      title: pack.author ? `${pack.title} · ${pack.author}` : pack.title,
+      pack,
+      stickers: pack.stickers.map(st => ({ ...st, packId: pack.id })),
+    });
+  }
+
+  const show = source => {
+    stickerTab = source.key;
+    title.textContent = source.title;
+    grid.replaceChildren(
+      ...source.stickers.map(st => {
+        const cell = el('button', 'sticker-cell');
+        cell.type = 'button';
+        cell.title = st.emoji ?? '';
+        cell.append(stickerImage(st.packId, st.id, STICKER_CELL_PX, st.emoji));
+        cell.addEventListener('click', ev => {
+          ev.stopPropagation();
+          sendSticker(st.packId, st.id);
+        });
+        return cell;
+      })
+    );
+    body.scrollTop = 0;
+    for (const tab of tabs.children) {
+      tab.classList.toggle('active', tab.dataset.key === source.key);
+    }
+  };
+
+  for (const source of sources) {
+    const tab = el('button', 'sticker-tab');
+    tab.type = 'button';
+    tab.dataset.key = source.key;
+    tab.title = source.title;
+    tab.setAttribute('aria-label', source.title);
+    if (source.pack) {
+      const cover = source.pack.coverStickerId ?? source.stickers[0]?.id;
+      if (cover !== undefined) {
+        tab.append(stickerImage(source.pack.id, cover, 28, source.title));
+      }
+    } else {
+      tab.append(icon('cat-recent'));
+    }
+    tab.addEventListener('click', ev => {
+      ev.stopPropagation();
+      show(source);
+    });
+    tabs.append(tab);
+  }
+
+  if (sources.length === 0) {
+    picker.replaceChildren(
+      el(
+        'div',
+        'emoji-none',
+        'No sticker packs installed. Add some in Signal (Stickers, then the + button).'
+      )
+    );
+  } else {
+    picker.replaceChildren(body, tabs);
+    show(sources.find(source => source.key === stickerTab) ?? sources[0]);
+  }
+  placePopover(picker, anchor);
 }
 
 // The composer's emoji button inserts at the cursor.
@@ -2922,6 +3062,15 @@ $('compose').addEventListener('paste', e => {
     return;
   }
   insertPlain(e.clipboardData?.getData('text/plain') ?? '');
+});
+$('sticker-open').append(icon('sticker'));
+$('sticker-open').addEventListener('click', ev => {
+  ev.stopPropagation();
+  if (!$('sticker-picker').hidden) {
+    closePopovers();
+    return;
+  }
+  openStickerPicker($('sticker-open'));
 });
 $('emoji-open').append(icon('react'));
 $('emoji-open').addEventListener('click', ev => {

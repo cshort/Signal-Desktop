@@ -106,7 +106,7 @@ type RenderedImageType = Readonly<{
 // Base64 of the result must fit in a frame with room to spare.
 const MAX_RENDERED_BASE64 = 900 * 1024;
 
-async function renderImage(
+export async function renderImage(
   url: string,
   size: Readonly<{ square: number } | { fit: number } | { width: number }>
 ): Promise<RenderedImageType | undefined> {

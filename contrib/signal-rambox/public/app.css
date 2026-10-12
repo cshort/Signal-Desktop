@@ -2277,6 +2277,81 @@ label.poll-option {
   background: var(--hover);
 }
 
+/* Signal's sticker picker: a pack's stickers, with packs as tabs below. */
+.sticker-picker {
+  flex-direction: column;
+  width: min(352px, calc(100vw - 16px));
+  height: min(420px, calc(100vh - 16px));
+  padding: 10px 8px 6px;
+  border-radius: 16px;
+  gap: 8px;
+}
+
+.sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 4px;
+}
+
+.sticker-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  padding: 4px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.sticker-cell:hover {
+  background: var(--hover);
+}
+
+.sticker-cell .sticker-img {
+  width: 72px;
+  max-width: 100%;
+  height: 72px;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.sticker-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.sticker-tab {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--icon);
+  cursor: pointer;
+}
+
+.sticker-tab:hover,
+.sticker-tab.active {
+  background: var(--hover);
+}
+
+.sticker-tab .sticker-img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
 /* Message status, with Signal's icons, in bubbles and the chat list. */
 .status-icon {
   flex: none;

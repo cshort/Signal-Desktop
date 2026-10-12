@@ -426,6 +426,38 @@ export function createWebServer({
       res.end(Buffer.from(thumb.data, 'base64'));
       return;
     }
+    if (req.method === 'GET' && route === 'api/stickers') {
+      sendJson(res, 200, await bridge.call('stickers.getPacks', {}));
+      return;
+    }
+    if (req.method === 'GET' && route === 'api/stickerImage') {
+      const width = Number(url.searchParams.get('width'));
+      const image = await bridge.call('stickers.getImage', {
+        packId: url.searchParams.get('packId') ?? '',
+        stickerId: Number(url.searchParams.get('stickerId')),
+        ...(Number.isInteger(width) && width >= 16
+          ? { width: Math.min(width, 512) }
+          : {}),
+      });
+      res.writeHead(200, {
+        ...SECURITY_HEADERS,
+        'Content-Type': image.contentType,
+        // A sticker never changes.
+        'Cache-Control': 'private, max-age=604800, immutable',
+      });
+      res.end(Buffer.from(image.data, 'base64'));
+      return;
+    }
+    if (req.method === 'POST' && route === 'api/sendSticker') {
+      const { conversationId, packId, stickerId } = await readJson(req);
+      const result = await bridge.call('messages.sendSticker', {
+        conversationId,
+        packId,
+        stickerId,
+      });
+      sendJson(res, 200, result);
+      return;
+    }
     if (req.method === 'GET' && route === 'api/attachment') {
       await streamAttachment(req, res, url);
       return;

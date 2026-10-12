@@ -1,0 +1,119 @@
+// Copyright 2026 Signal Messenger, LLC
+// SPDX-License-Identifier: AGPL-3.0-only
+
+import { createLogger } from '../../logging/log.std.ts';
+import {
+  getInstalledStickerPacks,
+  getRecentStickers,
+} from '../../state/selectors/stickers.std.ts';
+import * as Errors from '../../types/errors.std.ts';
+import { getSticker, getStickerPack } from '../../types/Stickers.preload.ts';
+import {
+  AttachmentDisposition,
+  getLocalAttachmentUrl,
+} from '../../util/getLocalAttachmentUrl.std.ts';
+import type { ServiceResultType } from '../hostTypes.std.ts';
+import type {
+  AttachmentsGetThumbnailResultType,
+  MessagesSendStickerParamsType,
+  StickersGetImageParamsType,
+  StickersGetPacksResultType,
+} from '../protocol.std.ts';
+import { ErrorCode } from '../protocol.std.ts';
+import { renderImage } from './ExternalClientExtras.preload.ts';
+import { getSendBlockReason } from './ExternalClientSend.preload.ts';
+import { getListedConversation } from './serviceHelpers.preload.ts';
+
+// Fork addition: Signal's sticker picker for external clients (decision F10).
+
+const log = createLogger('ExternalClientStickers');
+
+const notFound = { ok: false, code: ErrorCode.NotFound } as const;
+const PICKER_SIZE_PX = 160;
+
+// The picker's tabs: installed packs in Signal's order, and Recently used.
+export function getStickerPacks(): ServiceResultType {
+  const state = window.reduxStore.getState();
+  const value: StickersGetPacksResultType = {
+    packs: getInstalledStickerPacks(state).map(pack => ({
+      id: pack.id,
+      title: pack.title,
+      author: pack.author,
+      coverStickerId: pack.cover?.id ?? null,
+      stickers: pack.stickers.map(sticker => ({
+        id: sticker.id,
+        emoji: sticker.emoji ?? null,
+      })),
+    })),
+    recents: getRecentStickers(state).map(sticker => ({
+      packId: sticker.packId,
+      stickerId: sticker.id,
+      emoji: sticker.emoji ?? null,
+    })),
+  };
+  return { ok: true, value };
+}
+
+// Only stickers the picker offers: from installed packs, or recently used.
+function findPickerSticker(packId: string, stickerId: number) {
+  const pack = getStickerPack(packId);
+  const sticker = getSticker(packId, stickerId);
+  if (!pack || !sticker?.path || sticker.isCoverOnly) {
+    return undefined;
+  }
+  const state = window.reduxStore.getState();
+  const offered =
+    pack.status === 'installed' ||
+    state.stickers.recentStickers.some(
+      recent => recent.packId === packId && recent.stickerId === stickerId
+    );
+  return offered ? { pack, sticker } : undefined;
+}
+
+export async function getStickerImage({
+  packId,
+  stickerId,
+  width,
+}: StickersGetImageParamsType): Promise<ServiceResultType> {
+  const found = findPickerSticker(packId, stickerId);
+  if (!found) {
+    return notFound;
+  }
+  try {
+    const url = getLocalAttachmentUrl(found.sticker, {
+      disposition: AttachmentDisposition.Sticker,
+    });
+    const image = await renderImage(url, { fit: width ?? PICKER_SIZE_PX });
+    if (!image) {
+      return notFound;
+    }
+    const value: AttachmentsGetThumbnailResultType = image;
+    return { ok: true, value };
+  } catch (error) {
+    log.warn('getStickerImage failed', Errors.toLogFormat(error));
+    return notFound;
+  }
+}
+
+// Signal's own sticker send (which also moves it to Recently used), refused
+// where the composer would refuse (decision D11).
+export async function sendSticker({
+  conversationId,
+  packId,
+  stickerId,
+}: MessagesSendStickerParamsType): Promise<ServiceResultType> {
+  const model = getListedConversation(conversationId);
+  if (!model) {
+    return notFound;
+  }
+  if (!findPickerSticker(packId, stickerId)) {
+    return { ok: false, code: ErrorCode.InvalidArgument };
+  }
+  const reason = await getSendBlockReason(model, '');
+  if (reason) {
+    log.info(`sendSticker: refused (${reason})`);
+    return { ok: false, code: ErrorCode.PreconditionFailed, reason };
+  }
+  await model.sendStickerMessage(packId, stickerId);
+  return { ok: true, value: {} };
+}

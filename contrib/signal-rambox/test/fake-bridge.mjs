@@ -106,6 +106,7 @@ export class FakeBridge {
   messages = new Map();
   // conversationId -> [{ conversationId, author }]
   members = new Map();
+  stickers = { packs: [], recents: [] };
   calls = [];
   notificationsHandled = false;
   // conversationId -> reason, for messages.sendText refusals
@@ -292,6 +293,29 @@ export class FakeBridge {
           nextCursor: null,
         });
         return;
+      case 'stickers.getPacks':
+        this.#reply(session, id, this.stickers);
+        return;
+      case 'stickers.getImage':
+        this.#reply(session, id, {
+          contentType: 'image/webp',
+          width: 1,
+          height: 1,
+          data: (
+            this.stickerImageBytes ??
+            Buffer.from(`sticker ${params.packId} ${params.stickerId}`)
+          ).toString('base64'),
+        });
+        return;
+      case 'messages.sendSticker': {
+        const reason = this.sendRefusals.get(params.conversationId);
+        if (reason) {
+          this.#error(session, id, 'PRECONDITION_FAILED', reason);
+          return;
+        }
+        this.#reply(session, id, {});
+        return;
+      }
       case 'conversations.getMembers':
         this.#reply(session, id, {
           members: this.members.get(params.conversationId) ?? [],

@@ -129,6 +129,9 @@ export const Method = {
   PollsEnd: 'polls.end',
   PollsSend: 'polls.send',
   ConversationsGetMembers: 'conversations.getMembers',
+  StickersGetPacks: 'stickers.getPacks',
+  StickersGetImage: 'stickers.getImage',
+  MessagesSendSticker: 'messages.sendSticker',
 } as const;
 export type MethodType = (typeof Method)[keyof typeof Method];
 
@@ -157,6 +160,9 @@ export const SERVICE_METHOD_CAPABILITIES = {
   [Method.PollsEnd]: Capability.MessagesSend,
   [Method.PollsSend]: Capability.MessagesSend,
   [Method.ConversationsGetMembers]: Capability.ConversationsRead,
+  [Method.StickersGetPacks]: Capability.MessagesSend,
+  [Method.StickersGetImage]: Capability.MessagesSend,
+  [Method.MessagesSendSticker]: Capability.MessagesSend,
 } as const satisfies Partial<Record<MethodType, CapabilityType>>;
 export type ServiceMethodType = keyof typeof SERVICE_METHOD_CAPABILITIES;
 
@@ -758,6 +764,57 @@ export type PollsSendResultType = Readonly<{
   results: ReadonlyArray<ForwardResultDTO>;
 }>;
 
+// Fork addition: Signal's sticker picker. Packs are the user's installed
+// ones, in Signal's order; never their keys. Images come from Signal's own
+// decrypted copies, re-encoded like thumbnails.
+const stickerPackIdSchema = z.string().regex(/^[0-9a-f]{1,64}$/i);
+const stickerIdSchema = z.number().int().min(0).max(10_000);
+
+export const stickersGetPacksParamsSchema = z.object({}).strict();
+
+export type PackStickerDTO = Readonly<{
+  id: number;
+  emoji: string | null;
+}>;
+
+export type StickerPackDTO = Readonly<{
+  id: string;
+  title: string;
+  author: string;
+  coverStickerId: number | null;
+  stickers: ReadonlyArray<PackStickerDTO>;
+}>;
+
+export type StickersGetPacksResultType = Readonly<{
+  packs: ReadonlyArray<StickerPackDTO>;
+  // Signal's Recently used, newest first.
+  recents: ReadonlyArray<
+    Readonly<{ packId: string; stickerId: number; emoji: string | null }>
+  >;
+}>;
+
+export const stickersGetImageParamsSchema = z
+  .object({
+    packId: stickerPackIdSchema,
+    stickerId: stickerIdSchema,
+    width: z.number().int().min(16).max(512).optional(),
+  })
+  .strict();
+export type StickersGetImageParamsType = z.infer<
+  typeof stickersGetImageParamsSchema
+>;
+
+export const messagesSendStickerParamsSchema = z
+  .object({
+    conversationId: conversationIdSchema,
+    packId: stickerPackIdSchema,
+    stickerId: stickerIdSchema,
+  })
+  .strict();
+export type MessagesSendStickerParamsType = z.infer<
+  typeof messagesSendStickerParamsSchema
+>;
+
 export const notificationsSetHandledParamsSchema = z
   .object({
     handled: z.boolean(),
@@ -814,6 +871,9 @@ export const SERVICE_PARAM_SCHEMAS = {
   [Method.PollsVote]: pollsVoteParamsSchema,
   [Method.PollsEnd]: pollsEndParamsSchema,
   [Method.PollsSend]: pollsSendParamsSchema,
+  [Method.StickersGetPacks]: stickersGetPacksParamsSchema,
+  [Method.StickersGetImage]: stickersGetImageParamsSchema,
+  [Method.MessagesSendSticker]: messagesSendStickerParamsSchema,
 } as const satisfies Record<ServiceMethodType, z.ZodType>;
 
 export type ConversationsListParamsType = z.infer<

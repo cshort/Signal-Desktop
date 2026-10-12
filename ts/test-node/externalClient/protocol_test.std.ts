@@ -14,6 +14,7 @@ import {
   helloParamsSchema,
   messagesEditParamsSchema,
   messagesForwardParamsSchema,
+  messagesSendStickerParamsSchema,
   messagesSendTextParamsSchema,
   negotiateVersion,
   MAX_FORMATTING_RANGES,
@@ -247,6 +248,30 @@ describe('externalClient/protocol', () => {
           conversationId,
           body: 'hi',
           mentions: Array.from({ length: MAX_MENTIONS + 1 }, () => mention),
+        })
+      );
+    });
+
+    it('takes a sticker by pack and id', () => {
+      assert.isTrue(
+        accepts(messagesSendStickerParamsSchema, {
+          conversationId,
+          packId: '9acc9e8aba563d26a4994e69263e3b25',
+          stickerId: 3,
+        })
+      );
+      assert.isFalse(
+        accepts(messagesSendStickerParamsSchema, {
+          conversationId,
+          packId: '../etc',
+          stickerId: 3,
+        })
+      );
+      assert.isFalse(
+        accepts(messagesSendStickerParamsSchema, {
+          conversationId,
+          packId: 'abcd',
+          stickerId: -1,
         })
       );
     });

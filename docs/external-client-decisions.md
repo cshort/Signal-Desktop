@@ -413,3 +413,19 @@ problems). The words stay as each icon's tooltip.
 
 WHY: Mike wants to see from the list who has read a message, as Signal
 shows it (2026-10-11 22:37 PT), after forwarding to 28 chats.
+
+## F10. Fork only: sending stickers
+
+DECISION: `stickers.getPacks` lists the user's installed packs in Signal's
+order (id, title, author, cover and each sticker's id and emoji; never a
+pack key) and Signal's Recently used stickers. `stickers.getImage` draws a
+sticker from Signal's own decrypted copy, as thumbnails are drawn, and only
+for a sticker the picker offers (an installed pack or Recently used).
+`messages.sendSticker {conversationId, packId, stickerId}` sends through
+Signal's own `sendStickerMessage`, which also moves the sticker to Recently
+used, and is refused per D11. All three need `messages.send`, so no new
+approval. The page has a sticker button by the message box that opens a
+picker with Recently used and one tab per pack; picking a sticker sends it,
+as in Signal. Installing packs stays in Signal.
+
+WHY: Mike found stickers could be seen but not sent (2026-10-11 23:28 PT).

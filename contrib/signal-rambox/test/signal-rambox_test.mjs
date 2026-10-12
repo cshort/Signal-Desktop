@@ -672,6 +672,48 @@ describe('signal-rambox', () => {
     assert.deepEqual(call.params.mentions, mentions);
   });
 
+  it('lists sticker packs, serves their images and sends stickers', async () => {
+    bridge.stickers = {
+      packs: [
+        {
+          id: 'abcd',
+          title: 'Pepe',
+          author: 'Frog',
+          coverStickerId: 0,
+          stickers: [{ id: 0, emoji: '😲' }],
+        },
+      ],
+      recents: [{ packId: 'abcd', stickerId: 0, emoji: '😲' }],
+    };
+    const list = await http(port, { path: `/${helper.token}/api/stickers` });
+    assert.equal(list.status, 200);
+    assert.equal(JSON.parse(list.text).packs[0].title, 'Pepe');
+
+    const image = await http(port, {
+      path: `/${helper.token}/api/stickerImage?packId=abcd&stickerId=0&width=96`,
+    });
+    assert.equal(image.status, 200);
+    assert.equal(image.headers['content-type'], 'image/webp');
+    const read = bridge.calls.findLast(c => c.method === 'stickers.getImage');
+    assert.deepEqual(read.params, { packId: 'abcd', stickerId: 0, width: 96 });
+
+    const sent = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/sendSticker`,
+      headers: json,
+      body: { conversationId: alice.id, packId: 'abcd', stickerId: 0 },
+    });
+    assert.equal(sent.status, 200);
+    const send = bridge.calls.findLast(
+      c => c.method === 'messages.sendSticker'
+    );
+    assert.deepEqual(send.params, {
+      conversationId: alice.id,
+      packId: 'abcd',
+      stickerId: 0,
+    });
+  });
+
   it('passes formatting on sends and edits', async () => {
     const formatting = [{ start: 0, length: 2, style: 'bold' }];
     const sent = await http(port, {
