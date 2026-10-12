@@ -661,6 +661,29 @@ describe('signal-rambox', () => {
     assert.deepEqual(call.params.mentions, mentions);
   });
 
+  it('passes formatting on sends and edits', async () => {
+    const formatting = [{ start: 0, length: 2, style: 'bold' }];
+    const sent = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/send`,
+      headers: json,
+      body: { conversationId: alice.id, body: 'hi there', formatting },
+    });
+    assert.equal(sent.status, 200);
+    const send = bridge.calls.findLast(c => c.method === 'messages.sendText');
+    assert.deepEqual(send.params.formatting, formatting);
+
+    const edited = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/edit`,
+      headers: json,
+      body: { messageId: 'abc', body: 'hi again', formatting },
+    });
+    assert.equal(edited.status, 200);
+    const edit = bridge.calls.findLast(c => c.method === 'messages.edit');
+    assert.deepEqual(edit.params.formatting, formatting);
+  });
+
   it('marks read', async () => {
     const res = await http(port, {
       method: 'POST',

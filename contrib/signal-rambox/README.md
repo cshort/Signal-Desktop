@@ -9,7 +9,9 @@ client: it holds the keys, sends and receives. This helper is an approved
 companion app. It shows your chats with their photos, lets you read and send
 text messages, reply with a quote, react with your quick-reaction bar (click a reaction to see who sent
 it) and @mention people in groups (type @ and pick from the
-members) and
+members), format text as Signal does (select it, then right-click, use the
+bar above it, or Signal's shortcuts: Ctrl+B, Ctrl+I, Ctrl+Shift+X for
+strikethrough, Ctrl+E for monospace, Ctrl+Shift+B for spoiler) and
 copy text, shows photos, videos, GIFs, voice notes, files and stickers
 (with a full-screen viewer, and a Download button for anything Signal has
 not fetched yet), marks chats read when you look at them, and while its page is
@@ -42,7 +44,7 @@ Photos, member labels, reactions and replies use fork-only bridge additions
 `attachments.getThumbnail`, `attachments.read`, `attachments.download`,
 `messages.edit`, `messages.delete`, `attachments.uploadBegin`,
 `attachments.uploadChunk`, `messages.forward`, `emoji.getCatalog`, `polls.vote`, `polls.end`,
-`polls.send`, `conversations.getMembers`, mentions and
+`polls.send`, `conversations.getMembers`, mentions, formatting and
 `attachmentUploadIds` on
 `messages.sendText`, and pin order, formatting and link previews on the
 DTOs),

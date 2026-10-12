@@ -12,9 +12,11 @@ import {
   PROTOCOL_NAME,
   attachmentsUploadChunkParamsSchema,
   helloParamsSchema,
+  messagesEditParamsSchema,
   messagesForwardParamsSchema,
   messagesSendTextParamsSchema,
   negotiateVersion,
+  MAX_FORMATTING_RANGES,
   MAX_MENTIONS,
   pollsSendParamsSchema,
   pollsVoteParamsSchema,
@@ -245,6 +247,48 @@ describe('externalClient/protocol', () => {
           conversationId,
           body: 'hi',
           mentions: Array.from({ length: MAX_MENTIONS + 1 }, () => mention),
+        })
+      );
+    });
+
+    it('takes formatting on sends and edits, only Signal styles', () => {
+      const range = { start: 0, length: 2, style: 'bold' };
+      assert.isTrue(
+        accepts(messagesSendTextParamsSchema, {
+          conversationId,
+          body: 'hi',
+          formatting: [range, { ...range, style: 'spoiler' }],
+        })
+      );
+      assert.isTrue(
+        accepts(messagesEditParamsSchema, {
+          messageId: conversationId,
+          body: 'hi',
+          formatting: [{ ...range, style: 'monospace' }],
+        })
+      );
+      assert.isFalse(
+        accepts(messagesSendTextParamsSchema, {
+          conversationId,
+          body: 'hi',
+          formatting: [{ ...range, style: 'underline' }],
+        })
+      );
+      assert.isFalse(
+        accepts(messagesSendTextParamsSchema, {
+          conversationId,
+          body: 'hi',
+          formatting: [{ ...range, length: 0 }],
+        })
+      );
+      assert.isFalse(
+        accepts(messagesSendTextParamsSchema, {
+          conversationId,
+          body: 'hi',
+          formatting: Array.from(
+            { length: MAX_FORMATTING_RANGES + 1 },
+            () => range
+          ),
         })
       );
     });

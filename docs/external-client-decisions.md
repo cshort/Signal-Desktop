@@ -380,3 +380,22 @@ WHY: Mike tagged someone in a group from the page and nothing happened
 (2026-10-10). Mentions notify the person and render as mentions for
 everyone, which typed "@Name" text does not.
 
+## F8. Fork only: sending text formatting
+
+DECISION: `messages.sendText` and `messages.edit` take
+`formatting: [{start, length, style}]`, style one of bold, italic,
+strikethrough, monospace, spoiler (Signal's BodyRange styles, the same
+names messages already carry). Offsets count UTF-16 units of the body.
+Signal gets them as real body ranges alongside any mentions; a range past
+the end of the body is refused. The page's message box is editable HTML
+(plain-text editing, so the browser adds no markup of its own) and offers
+Signal's styles three ways: a right-click menu on selected text (Cut, Copy,
+Paste, then the five styles with checkmarks; Shift+right-click gives the
+browser's menu), a bar above selected text, and Signal's shortcuts (Ctrl+B,
+Ctrl+I, Ctrl+Shift+X, Ctrl+E, Ctrl+Shift+B). Pasted text comes in plain.
+Editing a message loads its styles and mentions back into the box.
+
+WHY: Mike asked for Bold, Italic, Strikethrough and Spoiler on right-click
+(2026-10-11 22:14 PT); Monospace, the bar and the shortcuts make it match
+Signal's own composer. Styles sent as body ranges render for every
+recipient, which Markdown-ish text would not.

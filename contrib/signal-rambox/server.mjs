@@ -492,12 +492,14 @@ export function createWebServer({
         quoteMessageId,
         attachmentUploadIds,
         mentions,
+        formatting,
       } = await readJson(req);
       const result = await bridge.call('messages.sendText', {
         conversationId,
         body,
         ...(quoteMessageId ? { quoteMessageId } : {}),
         ...(mentions?.length ? { mentions } : {}),
+        ...(formatting?.length ? { formatting } : {}),
         ...(attachmentUploadIds?.length ? { attachmentUploadIds } : {}),
       });
       sendJson(res, 200, result);
@@ -543,11 +545,12 @@ export function createWebServer({
       return;
     }
     if (req.method === 'POST' && route === 'api/edit') {
-      const { messageId, body, mentions } = await readJson(req);
+      const { messageId, body, mentions, formatting } = await readJson(req);
       const result = await bridge.call('messages.edit', {
         messageId,
         body,
         ...(mentions?.length ? { mentions } : {}),
+        ...(formatting?.length ? { formatting } : {}),
       });
       sendJson(res, 200, result);
       return;

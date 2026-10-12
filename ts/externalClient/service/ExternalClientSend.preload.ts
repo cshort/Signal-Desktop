@@ -19,7 +19,7 @@ import { makeQuote } from '../../util/makeQuote.preload.ts';
 import { isDirectConversation } from '../../util/whatTypeOfConversation.dom.ts';
 import type { ServiceResultType } from '../hostTypes.std.ts';
 import { toMessageDTO } from '../messageDto.std.ts';
-import { toMentionRanges } from './ExternalClientMentions.preload.ts';
+import { toBodyRanges } from './ExternalClientMentions.preload.ts';
 import type {
   MessagesMarkReadParamsType,
   MessagesSendTextParamsType,
@@ -127,6 +127,7 @@ export async function sendText({
   quoteMessageId,
   attachmentUploadIds,
   mentions,
+  formatting,
 }: MessagesSendTextParamsType): Promise<ServiceResultType> {
   const model = getListedConversation(conversationId);
   if (!model) {
@@ -155,8 +156,8 @@ export async function sendText({
     return { ok: false, code: ErrorCode.InvalidArgument };
   }
 
-  // Fork addition: @mentions of group members.
-  const bodyRanges = toMentionRanges(model, body, mentions);
+  // Fork addition: @mentions of group members, and text styles.
+  const bodyRanges = toBodyRanges(model, body, mentions, formatting);
   if (!bodyRanges) {
     return { ok: false, code: ErrorCode.InvalidArgument };
   }

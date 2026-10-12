@@ -41,7 +41,7 @@ import {
   ErrorCode,
   THUMBNAIL_SIZE_PX,
 } from '../protocol.std.ts';
-import { toMentionRanges } from './ExternalClientMentions.preload.ts';
+import { toBodyRanges } from './ExternalClientMentions.preload.ts';
 import { getSendBlockReason } from './ExternalClientSend.preload.ts';
 import {
   getDtoContext,
@@ -421,6 +421,7 @@ export async function editMessage({
   messageId,
   body,
   mentions,
+  formatting,
 }: MessagesEditParamsType): Promise<ServiceResultType> {
   const message = await loadMessage(messageId);
   if (!message) {
@@ -433,7 +434,7 @@ export async function editMessage({
   if (!getDtoContext().getActions(message).canEdit) {
     return { ok: false, code: ErrorCode.PreconditionFailed };
   }
-  const bodyRanges = toMentionRanges(model, body, mentions);
+  const bodyRanges = toBodyRanges(model, body, mentions, formatting);
   if (!bodyRanges) {
     return { ok: false, code: ErrorCode.InvalidArgument };
   }

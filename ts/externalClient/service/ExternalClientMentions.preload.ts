@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { ConversationModel } from '../../models/conversations.preload.ts';
-import type { DraftBodyRangeMention } from '../../types/BodyRange.std.ts';
+import { BodyRange } from '../../types/BodyRange.std.ts';
+import type {
+  DraftBodyRange,
+  DraftBodyRangeMention,
+} from '../../types/BodyRange.std.ts';
 import type { AciString } from '../../types/ServiceId.std.ts';
 import { isAciString } from '../../util/isAciString.std.ts';
 import type { ServiceResultType } from '../hostTypes.std.ts';
@@ -10,6 +14,7 @@ import type {
   ConversationsGetMembersParamsType,
   ConversationsGetMembersResultType,
   GroupMemberDTO,
+  SendFormattingType,
   SendMentionType,
 } from '../protocol.std.ts';
 import { ErrorCode, MENTION_PLACEHOLDER } from '../protocol.std.ts';
@@ -18,7 +23,7 @@ import {
   getListedConversation,
 } from './serviceHelpers.preload.ts';
 
-// Fork-only: @mentions, as Signal's composer offers and sends them.
+// Fork-only: @mentions and text styles, as Signal's composer sends them.
 
 type MemberType = Readonly<{
   conversationId: string;
@@ -93,6 +98,36 @@ export function toMentionRanges(
       mentionAci: member.aci,
       replacementText: member.title,
     });
+  }
+  return ranges;
+}
+
+const STYLES: Record<SendFormattingType['style'], BodyRange.Style> = {
+  bold: BodyRange.Style.BOLD,
+  italic: BodyRange.Style.ITALIC,
+  strikethrough: BodyRange.Style.STRIKETHROUGH,
+  monospace: BodyRange.Style.MONOSPACE,
+  spoiler: BodyRange.Style.SPOILER,
+};
+
+// Mentions and styles as Signal's body ranges, or undefined when one does
+// not fit the body (the send is then refused).
+export function toBodyRanges(
+  model: ConversationModel,
+  body: string,
+  mentions: ReadonlyArray<SendMentionType> | undefined,
+  formatting: ReadonlyArray<SendFormattingType> | undefined
+): Array<DraftBodyRange> | undefined {
+  const mentionRanges = toMentionRanges(model, body, mentions);
+  if (!mentionRanges) {
+    return undefined;
+  }
+  const ranges: Array<DraftBodyRange> = [...mentionRanges];
+  for (const { start, length, style } of formatting ?? []) {
+    if (start + length > body.length) {
+      return undefined;
+    }
+    ranges.push({ start, length, style: STYLES[style] });
   }
   return ranges;
 }

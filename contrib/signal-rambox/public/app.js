@@ -1342,7 +1342,7 @@ async function selectConversation(id) {
   closePopovers();
   cancelReply();
   // Mentions name members of the chat they were typed in.
-  composeMentions = [];
+  dropComposeMentions();
   $('send-error').hidden = true;
   $('empty').hidden = true;
   $('chat-head').hidden = false;
@@ -1357,7 +1357,7 @@ async function selectConversation(id) {
   } catch (error) {
     showError(`Couldn't load messages (${error.code ?? error.message}).`);
   }
-  $('compose').focus();
+  focusCompose();
   maybeMarkRead();
 }
 
@@ -1414,6 +1414,7 @@ function closePopovers() {
   $('emoji-picker').hidden = true;
   $('reaction-viewer').hidden = true;
   $('mention-picker').hidden = true;
+  $('format-menu').hidden = true;
 }
 
 // anchor: an element, or a rect taken before its element was hidden.
@@ -1645,15 +1646,7 @@ async function openEmojiPicker(anchorElement, onPick) {
 
 // The composer's emoji button inserts at the cursor.
 function insertEmoji(e) {
-  const box = $('compose');
-  const start = box.selectionStart ?? box.value.length;
-  const end = box.selectionEnd ?? start;
-  box.value = box.value.slice(0, start) + e + box.value.slice(end);
-  trackComposeChange();
-  const at = start + e.length;
-  box.focus();
-  box.setSelectionRange(at, at);
-  autosize();
+  insertPlain(e);
   // Into Signal's recently used list, as its own picker does.
   api('api/emojiUsed', { emoji: e }).catch(() => {});
 }
@@ -1754,7 +1747,7 @@ function startReply(m) {
     quote.classList.add(`nc-${m.author.nameColor}`);
   }
   $('reply-bar').hidden = false;
-  $('compose').focus();
+  focusCompose();
 }
 
 function cancelReply() {
@@ -1780,10 +1773,8 @@ function startEdit(m) {
   );
   $('reply-bar').classList.add('editing');
   $('reply-bar').hidden = false;
-  const box = $('compose');
-  setCompose(m.body ?? '', m.mentions ?? []);
-  box.focus();
-  box.setSelectionRange(box.value.length, box.value.length);
+  setCompose(m.body ?? '', m.mentions ?? [], m.formatting ?? []);
+  focusCompose({ end: true });
 }
 
 async function deleteMessage(m, forEveryone) {
@@ -1956,8 +1947,11 @@ function connectEvents() {
 // --- composer ------------------------------------------------------------------
 
 async function sendCurrent() {
-  const box = $('compose');
-  const { body: rawBody, mentions: rawMentions } = composeForSend();
+  const {
+    body: rawBody,
+    mentions: rawMentions,
+    formatting: rawFormatting,
+  } = composeForSend();
   const conversationId = selectedId;
   const files = editing ? [] : draftsFor(conversationId);
   if (!conversationId || (rawBody.trim() === '' && files.length === 0)) {
@@ -1970,7 +1964,15 @@ async function sendCurrent() {
   const mentions = rawMentions
     .map(mention => ({ ...mention, start: mention.start - lead }))
     .filter(mention => mention.start >= 0 && mention.start < body.length);
-  const withMentions = mentions.length > 0 ? { mentions } : {};
+  const formatting = rawFormatting.flatMap(range => {
+    const start = Math.max(0, range.start - lead);
+    const end = Math.min(body.length, range.start + range.length - lead);
+    return end > start ? [{ ...range, start, length: end - start }] : [];
+  });
+  const withMentions = {
+    ...(mentions.length > 0 ? { mentions } : {}),
+    ...(formatting.length > 0 ? { formatting } : {}),
+  };
   $('send').disabled = true;
   $('send-error').hidden = true;
   try {
@@ -2010,101 +2012,532 @@ async function sendCurrent() {
   } finally {
     $('send').disabled = false;
     $('send').textContent = 'Send';
-    box.focus();
+    focusCompose();
   }
 }
 
-// --- @mentions -----------------------------------------------------------------
+// --- message box: mentions and formatting ----------------------------------------
 
-const MENTION_PLACEHOLDER = '\uFFFC';
-// In the composer, a mention is the text "@Name"; these say where each is.
-// [{ start, end, conversationId }], kept in order.
-let composeMentions = [];
-let composeLast = '';
+// The box is editable HTML so it can show styles and mentions as Signal's
+// does. What it holds is read back as a list of characters, each with its
+// styles and, for a mention, who it names; that list is what gets sent.
+const MENTION_PLACEHOLDER = '￼';
+const STYLES = ['bold', 'italic', 'strikethrough', 'monospace', 'spoiler'];
+const STYLE_LABEL = {
+  bold: 'Bold',
+  italic: 'Italic',
+  strikethrough: 'Strikethrough',
+  monospace: 'Monospace',
+  spoiler: 'Spoiler',
+};
+// Signal's own shortcuts (ts/quill/formatting/menu.dom.tsx).
+const STYLE_SHORTCUT = {
+  bold: 'Ctrl+B',
+  italic: 'Ctrl+I',
+  strikethrough: 'Ctrl+Shift+X',
+  monospace: 'Ctrl+E',
+  spoiler: 'Ctrl+Shift+B',
+};
+const CLASS_STYLE = Object.fromEntries(
+  Object.entries(STYLE_CLASS).map(([style, cls]) => [cls, style])
+);
+const TAG_STYLE = {
+  B: 'bold',
+  STRONG: 'bold',
+  I: 'italic',
+  EM: 'italic',
+  S: 'strikethrough',
+  STRIKE: 'strikethrough',
+  DEL: 'strikethrough',
+  CODE: 'monospace',
+};
+// The last selection in the box, as character offsets; the emoji picker
+// takes the focus away and still inserts here.
+let composeSelection = null;
 // conversationId -> Promise of [{ conversationId, author }]
 const memberCache = new Map();
 let mentionQuery = null;
 let mentionChoices = [];
 let mentionIndex = 0;
 
-function setCompose(text, mentions = []) {
-  // Messages hold U+FFFC where a mention is; write it out as "@Name".
-  let value = '';
+function composeBox() {
+  return $('compose');
+}
+
+// [{ ch, styles: Set, mention?: { conversationId, title } }]
+function readNodes(root, { dropPlaceholder }) {
+  const chars = [];
+  const leaves = [];
+  const walk = (node, styles) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      for (const ch of node.data.replaceAll(MENTION_PLACEHOLDER, '')) {
+        chars.push({ ch: ch === ' ' ? ' ' : ch, styles });
+      }
+      leaves.push(node);
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return;
+    }
+    if (node.tagName === 'BR') {
+      chars.push({ ch: '\n', styles });
+      leaves.push(node);
+      return;
+    }
+    if (node.dataset.cid) {
+      chars.push({
+        ch: MENTION_PLACEHOLDER,
+        styles,
+        mention: {
+          conversationId: node.dataset.cid,
+          title: node.dataset.title,
+        },
+      });
+      leaves.push(node);
+      return;
+    }
+    let inner = styles;
+    const add = [
+      TAG_STYLE[node.tagName],
+      ...[...node.classList].map(cls => CLASS_STYLE[cls]),
+    ].filter(Boolean);
+    if (add.length > 0) {
+      inner = new Set([...styles, ...add]);
+    }
+    const block = node !== root && /^(DIV|P|LI)$/.test(node.tagName);
+    if (block && chars.length > 0 && chars.at(-1).ch !== '\n') {
+      chars.push({ ch: '\n', styles: new Set() });
+    }
+    for (const child of node.childNodes) {
+      walk(child, inner);
+    }
+  };
+  walk(root, new Set());
+  // A <br> at the very end only holds the caret on an empty last line.
+  if (dropPlaceholder && leaves.at(-1)?.nodeName === 'BR') {
+    chars.pop();
+  }
+  return chars;
+}
+
+function readCompose() {
+  return readNodes(composeBox(), { dropPlaceholder: true });
+}
+
+// Where a DOM point falls, counted in characters.
+function offsetAt(container, offset) {
+  const box = composeBox();
+  const range = document.createRange();
+  range.setStart(box, 0);
+  range.setEnd(container, offset);
+  const holder = document.createElement('div');
+  holder.append(range.cloneContents());
+  return readNodes(holder, { dropPlaceholder: false }).length;
+}
+
+function selectionOffsets() {
+  const box = composeBox();
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) {
+    return null;
+  }
+  const range = sel.getRangeAt(0);
+  if (
+    !box.contains(range.startContainer) ||
+    !box.contains(range.endContainer)
+  ) {
+    return null;
+  }
+  const a = offsetAt(range.startContainer, range.startOffset);
+  const b = offsetAt(range.endContainer, range.endOffset);
+  const length = readCompose().length;
+  return { start: Math.min(a, length), end: Math.min(b, length) };
+}
+
+// The DOM point for a character offset, in a box this code drew.
+function pointAt(target) {
+  const box = composeBox();
   let at = 0;
-  composeMentions = [];
-  for (const mention of [...mentions].sort((a, b) => a.start - b.start)) {
-    value += text.slice(at, mention.start);
-    const token = `@${mention.title ?? 'Someone'}`;
-    if (mention.conversationId) {
-      composeMentions.push({
-        start: value.length,
-        end: value.length + token.length,
-        conversationId: mention.conversationId,
+  const leaves = [];
+  const walk = node => {
+    if (
+      node.nodeType === Node.TEXT_NODE ||
+      node.nodeName === 'BR' ||
+      node.dataset?.cid
+    ) {
+      leaves.push(node);
+      return;
+    }
+    for (const child of node.childNodes) {
+      walk(child);
+    }
+  };
+  walk(box);
+  for (const leaf of leaves) {
+    if (leaf.nodeType === Node.TEXT_NODE) {
+      // Offsets here count characters; the DOM counts UTF-16 units.
+      const cps = [...leaf.data];
+      if (target <= at + cps.length) {
+        return [leaf, cps.slice(0, target - at).join('').length];
+      }
+      at += cps.length;
+    } else {
+      if (target <= at) {
+        return [leaf.parentNode, [...leaf.parentNode.childNodes].indexOf(leaf)];
+      }
+      at += 1;
+    }
+  }
+  return [box, box.childNodes.length];
+}
+
+function selectOffsets(start, end = start) {
+  const sel = window.getSelection();
+  const range = document.createRange();
+  range.setStart(...pointAt(start));
+  range.setEnd(...pointAt(end));
+  sel.removeAllRanges();
+  sel.addRange(range);
+  composeSelection = { start, end };
+}
+
+function styleKey(styles) {
+  return STYLES.filter(s => styles.has(s)).join(' ');
+}
+
+// Draws the characters back into the box: one span per run of styles.
+function drawCompose(chars) {
+  const box = composeBox();
+  const nodes = [];
+  let run = null;
+  let runKey = null;
+  const holder = styles => {
+    const key = styleKey(styles);
+    if (key === '') {
+      run = null;
+      runKey = null;
+      return null;
+    }
+    if (run && runKey === key) {
+      return run;
+    }
+    run = el(
+      'span',
+      STYLES.filter(s => styles.has(s))
+        .map(s => STYLE_CLASS[s])
+        .join(' ')
+    );
+    runKey = key;
+    nodes.push(run);
+    return run;
+  };
+  const put = (parent, node) => {
+    if (parent) {
+      parent.append(node);
+    } else {
+      nodes.push(node);
+    }
+  };
+  let text = '';
+  let textStyles = null;
+  const flush = () => {
+    if (text) {
+      put(holder(textStyles), document.createTextNode(text));
+      text = '';
+    }
+  };
+  for (const c of chars) {
+    if (c.mention) {
+      flush();
+      const pill = el('span', 'mention', `@${c.mention.title ?? 'Someone'}`);
+      pill.contentEditable = 'false';
+      pill.dataset.cid = c.mention.conversationId;
+      pill.dataset.title = c.mention.title ?? 'Someone';
+      put(holder(c.styles), pill);
+    } else if (c.ch === '\n') {
+      flush();
+      run = null;
+      runKey = null;
+      nodes.push(el('br'));
+    } else {
+      if (textStyles && styleKey(textStyles) !== styleKey(c.styles)) {
+        flush();
+      }
+      textStyles = c.styles;
+      text += c.ch;
+    }
+  }
+  flush();
+  if (chars.at(-1)?.ch === '\n') {
+    nodes.push(el('br'));
+  }
+  box.replaceChildren(...nodes);
+}
+
+function charsOf(text, styles = new Set()) {
+  return [
+    ...text.replaceAll(MENTION_PLACEHOLDER, '').replace(/\r\n?/g, '\n'),
+  ].map(ch => ({ ch, styles }));
+}
+
+// Messages hold U+FFFC where a mention is, plus ranges for styles.
+function setCompose(text, mentions = [], formatting = []) {
+  const byStart = new Map(mentions.map(m => [m.start, m]));
+  const chars = [];
+  let i = 0;
+  for (const ch of text) {
+    const styles = new Set(
+      formatting
+        .filter(r => r.start <= i && i < r.start + r.length)
+        .map(r => r.style)
+        .filter(s => STYLES.includes(s))
+    );
+    const mention = byStart.get(i);
+    if (ch === MENTION_PLACEHOLDER && mention?.conversationId) {
+      chars.push({
+        ch,
+        styles,
+        mention: {
+          conversationId: mention.conversationId,
+          title: mention.title ?? 'Someone',
+        },
+      });
+    } else if (ch === MENTION_PLACEHOLDER) {
+      // A mention of someone the page can't name again: keep the words.
+      chars.push(...charsOf(`@${mention?.title ?? 'Someone'}`, styles));
+    } else {
+      chars.push({ ch, styles });
+    }
+    i += ch.length;
+  }
+  drawCompose(chars);
+  composeSelection = null;
+}
+
+// Replaces start..end with the given characters, then puts the caret after.
+function spliceCompose(start, end, inserted) {
+  const chars = readCompose();
+  chars.splice(start, end - start, ...inserted);
+  drawCompose(chars);
+  composeBox().focus();
+  selectOffsets(start + inserted.length);
+}
+
+function insertPlain(text) {
+  const at = selectionOffsets() ?? composeSelection;
+  const length = readCompose().length;
+  const start = at?.start ?? length;
+  const end = at?.end ?? length;
+  spliceCompose(start, end, charsOf(text));
+  onComposeInput();
+}
+
+// The body as Signal wants it: U+FFFC for each mention, and style ranges.
+function composeForSend() {
+  const chars = readCompose();
+  // Ranges count UTF-16 units, as Signal's do.
+  let body = '';
+  const mentions = [];
+  const formatting = [];
+  const open = new Map();
+  const units = [];
+  for (const c of chars) {
+    if (c.mention) {
+      mentions.push({
+        start: body.length,
+        conversationId: c.mention.conversationId,
       });
     }
-    value += token;
-    at = mention.start + mention.length;
+    units.push({ start: body.length, styles: c.styles });
+    body += c.ch;
   }
-  value += text.slice(at);
-  const box = $('compose');
-  box.value = value;
-  composeLast = value;
-  autosize();
+  units.push({ start: body.length, styles: new Set() });
+  for (const unit of units) {
+    for (const style of STYLES) {
+      if (unit.styles.has(style) && !open.has(style)) {
+        open.set(style, unit.start);
+      } else if (!unit.styles.has(style) && open.has(style)) {
+        const start = open.get(style);
+        formatting.push({ start, length: unit.start - start, style });
+        open.delete(style);
+      }
+    }
+  }
+  return { body, mentions, formatting };
 }
 
-// Moves mentions after an edit, and drops any the edit touched.
-function trackComposeChange() {
-  const value = $('compose').value;
-  const old = composeLast;
-  composeLast = value;
-  if (composeMentions.length === 0 || value === old) {
+// Bold and the rest: on for the whole selection unless all of it has it.
+function toggleStyle(style) {
+  const at = selectionOffsets();
+  if (!at || at.start === at.end) {
     return;
   }
-  let prefix = 0;
-  const max = Math.min(old.length, value.length);
-  while (prefix < max && old[prefix] === value[prefix]) {
-    prefix += 1;
-  }
-  let suffix = 0;
-  while (
-    suffix < max - prefix &&
-    old[old.length - 1 - suffix] === value[value.length - 1 - suffix]
-  ) {
-    suffix += 1;
-  }
-  const oldEnd = old.length - suffix;
-  const shift = value.length - old.length;
-  composeMentions = composeMentions.flatMap(mention => {
-    if (mention.end <= prefix) {
-      return [mention];
+  const chars = readCompose();
+  const picked = chars.slice(at.start, at.end);
+  const on = !picked.every(c => c.styles.has(style));
+  for (let i = at.start; i < at.end; i += 1) {
+    const styles = new Set(chars[i].styles);
+    if (on) {
+      styles.add(style);
+    } else {
+      styles.delete(style);
     }
-    if (mention.start >= oldEnd) {
-      return [
-        { ...mention, start: mention.start + shift, end: mention.end + shift },
-      ];
-    }
-    return [];
-  });
+    chars[i] = { ...chars[i], styles };
+  }
+  drawCompose(chars);
+  composeBox().focus();
+  selectOffsets(at.start, at.end);
+  updateFormatBar();
 }
 
-// The body as Signal wants it: U+FFFC for each mention, with its start.
-function composeForSend() {
-  const value = $('compose').value;
-  let body = '';
-  let at = 0;
-  const mentions = [];
-  for (const mention of composeMentions) {
-    body += value.slice(at, mention.start);
-    mentions.push({
-      start: body.length,
-      conversationId: mention.conversationId,
-    });
-    body += MENTION_PLACEHOLDER;
-    at = mention.end;
+function selectionHas(style) {
+  const at = selectionOffsets();
+  if (!at || at.start === at.end) {
+    return false;
   }
-  body += value.slice(at);
-  return { body, mentions };
+  return readCompose()
+    .slice(at.start, at.end)
+    .every(c => c.styles.has(style));
 }
+
+// Mentions name members of one chat; elsewhere they become plain words.
+function dropComposeMentions() {
+  const chars = readCompose();
+  if (!chars.some(c => c.mention)) {
+    return;
+  }
+  drawCompose(
+    chars.flatMap(c =>
+      c.mention ? charsOf(`@${c.mention.title}`, c.styles) : [c]
+    )
+  );
+}
+
+function focusCompose({ end = false } = {}) {
+  const box = composeBox();
+  box.focus();
+  if (end || !selectionOffsets()) {
+    selectOffsets(readCompose().length);
+  }
+}
+
+// Keeps the empty box truly empty, so the placeholder shows.
+function onComposeInput() {
+  const box = composeBox();
+  if (box.childNodes.length > 0 && readCompose().length === 0) {
+    box.replaceChildren();
+  }
+  updateMentionPicker();
+  updateFormatBar();
+}
+
+// --- format bar and menu -------------------------------------------------------
+
+function styleButton(style, onClick) {
+  const b = el('button', `format-button fb-${style}`);
+  b.type = 'button';
+  b.title = `${STYLE_LABEL[style]} (${STYLE_SHORTCUT[style]})`;
+  b.setAttribute('aria-label', STYLE_LABEL[style]);
+  b.append(el('span', STYLE_CLASS[style], STYLE_LABEL[style][0]));
+  b.addEventListener('mousedown', e => {
+    // Keep the selection in the box.
+    e.preventDefault();
+  });
+  b.addEventListener('click', e => {
+    e.stopPropagation();
+    onClick();
+  });
+  return b;
+}
+
+function updateFormatBar() {
+  const bar = $('format-bar');
+  const box = composeBox();
+  const at = document.activeElement === box ? selectionOffsets() : null;
+  if (!at || at.start === at.end || !$('format-menu').hidden) {
+    bar.hidden = true;
+    return;
+  }
+  if (bar.childElementCount === 0) {
+    bar.append(
+      ...STYLES.map(style => styleButton(style, () => toggleStyle(style)))
+    );
+  }
+  for (const style of STYLES) {
+    bar
+      .querySelector(`.fb-${style}`)
+      .classList.toggle('active', selectionHas(style));
+  }
+  bar.hidden = false;
+  const rect = window.getSelection().getRangeAt(0).getBoundingClientRect();
+  const b = bar.getBoundingClientRect();
+  const left = Math.min(
+    Math.max(8, rect.left + rect.width / 2 - b.width / 2),
+    window.innerWidth - b.width - 8
+  );
+  bar.style.left = `${left}px`;
+  bar.style.top = `${Math.max(8, rect.top - b.height - 8)}px`;
+}
+
+async function pasteFromClipboard() {
+  try {
+    insertPlain(await navigator.clipboard.readText());
+  } catch {
+    toast('Press Ctrl+V to paste.');
+  }
+}
+
+// Right-click on selected text: Signal's styles, plus cut, copy and paste.
+// Shift+right-click still gives the browser's own menu.
+function openFormatMenu(x, y) {
+  closePopovers();
+  const menu = $('format-menu');
+  const item = (label, shortcut, action, checked = null) => {
+    const b = el('button', 'menu-item');
+    b.type = 'button';
+    b.setAttribute('role', checked === null ? 'menuitem' : 'menuitemcheckbox');
+    if (checked !== null) {
+      b.setAttribute('aria-checked', String(checked));
+    }
+    b.append(
+      el('span', 'format-check', checked ? '✓' : ''),
+      el('span', 'format-label', label),
+      el('span', 'format-shortcut', shortcut)
+    );
+    b.addEventListener('mousedown', e => e.preventDefault());
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      closeFormatMenu();
+      action();
+    });
+    return b;
+  };
+  menu.replaceChildren(
+    item('Cut', 'Ctrl+X', () => document.execCommand('cut')),
+    item('Copy', 'Ctrl+C', () => document.execCommand('copy')),
+    item('Paste', 'Ctrl+V', () => pasteFromClipboard()),
+    el('div', 'menu-separator'),
+    ...STYLES.map(style =>
+      item(
+        STYLE_LABEL[style],
+        STYLE_SHORTCUT[style],
+        () => toggleStyle(style),
+        selectionHas(style)
+      )
+    )
+  );
+  $('format-bar').hidden = true;
+  menu.hidden = false;
+  const m = menu.getBoundingClientRect();
+  menu.style.left = `${Math.min(x, window.innerWidth - m.width - 8)}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - m.height - 8))}px`;
+}
+
+function closeFormatMenu() {
+  $('format-menu').hidden = true;
+}
+
+// --- @mentions -----------------------------------------------------------------
 
 function loadMembers(conversationId) {
   if (!memberCache.has(conversationId)) {
@@ -2140,21 +2573,23 @@ function matchesMention(member, query) {
 
 // The "@query" right before the caret, if the caret is in one.
 function mentionTrigger() {
-  const box = $('compose');
-  const caret = box.selectionStart;
-  if (caret !== box.selectionEnd) {
+  if (document.activeElement !== composeBox()) {
     return null;
   }
-  const before = box.value.slice(0, caret);
-  const match = /(^|\s)@([^\s@]{0,40})$/u.exec(before);
+  const at = selectionOffsets();
+  if (!at || at.start !== at.end) {
+    return null;
+  }
+  const before = readCompose()
+    .slice(0, at.start)
+    .map(c => c.ch)
+    .join('');
+  const match = /(^|\s)@([^\s@￼]{0,40})$/u.exec(before);
   if (!match) {
     return null;
   }
-  const start = caret - match[2].length - 1;
-  if (composeMentions.some(m => start >= m.start && start < m.end)) {
-    return null;
-  }
-  return { start, end: caret, query: match[2] };
+  const length = [...match[2]].length;
+  return { start: at.start - length - 1, end: at.start, query: match[2] };
 }
 
 async function updateMentionPicker() {
@@ -2203,7 +2638,7 @@ function renderMentionPicker() {
     })
   );
   picker.hidden = false;
-  const box = $('compose').getBoundingClientRect();
+  const box = composeBox().getBoundingClientRect();
   picker.style.left = `${box.left}px`;
   picker.style.width = `${Math.min(box.width, 360)}px`;
   picker.style.top = `${Math.max(8, box.top - picker.offsetHeight - 6)}px`;
@@ -2221,32 +2656,80 @@ function pickMention(member) {
   if (!trigger) {
     return;
   }
-  const box = $('compose');
-  const token = `@${member.author.title}`;
-  box.setRangeText(`${token} `, trigger.start, trigger.end, 'end');
-  trackComposeChange();
-  composeMentions = [
-    ...composeMentions,
-    {
-      start: trigger.start,
-      end: trigger.start + token.length,
-      conversationId: member.conversationId,
-    },
-  ].sort((a, b) => a.start - b.start);
   closeMentionPicker();
-  autosize();
-  box.focus();
+  spliceCompose(trigger.start, trigger.end, [
+    {
+      ch: MENTION_PLACEHOLDER,
+      styles: new Set(),
+      mention: {
+        conversationId: member.conversationId,
+        title: member.author.title,
+      },
+    },
+    { ch: ' ', styles: new Set() },
+  ]);
 }
 
-$('compose').addEventListener('input', () => {
-  trackComposeChange();
-  updateMentionPicker();
+// --- message box events ----------------------------------------------------------
+
+{
+  const box = composeBox();
+  // Plain-text editing keeps the browser from adding its own markup; the
+  // styles here come only from this code.
+  box.contentEditable = 'plaintext-only';
+  if (box.contentEditable !== 'plaintext-only') {
+    box.contentEditable = 'true';
+  }
+}
+composeBox().addEventListener('input', onComposeInput);
+composeBox().addEventListener('blur', () => {
+  closeMentionPicker();
+  $('format-bar').hidden = true;
 });
-$('compose').addEventListener('blur', () => closeMentionPicker());
-$('compose').addEventListener(
+composeBox().addEventListener('beforeinput', e => {
+  // The browser's own bold and the like would bypass Signal's styles.
+  if (e.inputType.startsWith('format')) {
+    e.preventDefault();
+  }
+});
+document.addEventListener('selectionchange', () => {
+  const at = selectionOffsets();
+  if (at) {
+    composeSelection = at;
+  }
+  if (document.activeElement === composeBox()) {
+    updateFormatBar();
+    if (mentionQuery || !$('mention-picker').hidden) {
+      updateMentionPicker();
+    }
+  }
+});
+composeBox().addEventListener('contextmenu', e => {
+  const at = selectionOffsets();
+  if (e.shiftKey || !at || at.start === at.end) {
+    return;
+  }
+  e.preventDefault();
+  openFormatMenu(e.clientX, e.clientY);
+});
+composeBox().addEventListener('drop', e => {
+  if (e.dataTransfer?.files.length) {
+    return;
+  }
+  // Dropped text comes in plain, where it was dropped.
+  e.preventDefault();
+  const text = e.dataTransfer?.getData('text/plain') ?? '';
+  const point = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+  if (point && composeBox().contains(point.startContainer)) {
+    const at = offsetAt(point.startContainer, point.startOffset);
+    composeSelection = { start: at, end: at };
+    window.getSelection().removeAllRanges();
+  }
+  insertPlain(text);
+});
+composeBox().addEventListener(
   'keydown',
   e => {
-    const box = $('compose');
     if (!$('mention-picker').hidden && mentionChoices.length > 0) {
       const move = { ArrowDown: 1, ArrowUp: -1 }[e.key];
       if (move) {
@@ -2264,27 +2747,35 @@ $('compose').addEventListener(
       e.stopImmediatePropagation();
       return;
     }
-    // Backspace or Delete next to a mention removes all of it, as Signal does.
-    if (
-      (e.key === 'Backspace' || e.key === 'Delete') &&
-      box.selectionStart === box.selectionEnd
-    ) {
-      const caret = box.selectionStart;
-      const hit = composeMentions.find(m =>
-        e.key === 'Backspace'
-          ? caret > m.start && caret <= m.end
-          : caret >= m.start && caret < m.end
-      );
-      if (hit) {
-        e.preventDefault();
-        box.setRangeText('', hit.start, hit.end, 'end');
-        trackComposeChange();
-        autosize();
-      }
+    if (e.key === 'Enter' && e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      insertPlain('\n');
+      return;
+    }
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) {
+      return;
+    }
+    const key = e.key.toLowerCase();
+    const style = e.shiftKey
+      ? { x: 'strikethrough', b: 'spoiler' }[key]
+      : { b: 'bold', i: 'italic', e: 'monospace' }[key];
+    if (style) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      toggleStyle(style);
+    } else if (key === 'u' && !e.shiftKey) {
+      // Signal has no underline.
+      e.preventDefault();
     }
   },
   { capture: true }
 );
+document.addEventListener('mousedown', e => {
+  if (!e.target.closest?.('#format-menu')) {
+    closeFormatMenu();
+  }
+});
 
 // --- attachments to send ------------------------------------------------------
 
@@ -2313,7 +2804,7 @@ function addDrafts(fileList) {
   }
   drafts.set(selectedId, list);
   renderDrafts();
-  $('compose').focus();
+  focusCompose();
 }
 
 function removeDraft(conversationId, draft) {
@@ -2393,12 +2884,17 @@ async function uploadFile(file) {
 }
 
 // Files from the clipboard: screenshots, copied images, copied files.
+// Text comes in plain; styles are set here, as in Signal.
 $('compose').addEventListener('paste', e => {
   const files = [...(e.clipboardData?.files ?? [])];
-  if (files.length > 0 && !editing) {
-    e.preventDefault();
-    addDrafts(files);
+  e.preventDefault();
+  if (files.length > 0) {
+    if (!editing) {
+      addDrafts(files);
+    }
+    return;
   }
+  insertPlain(e.clipboardData?.getData('text/plain') ?? '');
 });
 $('emoji-open').append(icon('react'));
 $('emoji-open').addEventListener('click', ev => {
@@ -2903,12 +3399,6 @@ $('search-open').addEventListener('click', () => {
   $('search').focus();
 });
 
-function autosize() {
-  const box = $('compose');
-  box.style.height = 'auto';
-  box.style.height = `${box.scrollHeight}px`;
-}
-
 $('composer').addEventListener('submit', e => {
   e.preventDefault();
   sendCurrent();
@@ -2921,7 +3411,6 @@ $('compose').addEventListener('keydown', e => {
     cancelReply();
   }
 });
-$('compose').addEventListener('input', autosize);
 $('older').addEventListener('click', () => loadMessages({ older: true }));
 $('search').addEventListener('input', renderConversations);
 $('filter-unread').append(icon('filter'));

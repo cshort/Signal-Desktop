@@ -95,18 +95,23 @@
             title="Emoji"
             aria-label="Emoji"
           ></button>
-          <textarea
+          <div
             id="compose"
-            rows="1"
-            placeholder="Message"
-            autocomplete="off"
-          ></textarea>
+            class="compose"
+            role="textbox"
+            aria-multiline="true"
+            aria-label="Message"
+            data-placeholder="Message"
+            spellcheck="true"
+          ></div>
           <button type="submit" id="send">Send</button>
         </form>
       </section>
     </main>
     <div class="popover" id="reaction-picker" role="menu" hidden></div>
     <div class="popover menu" id="more-menu" role="menu" hidden></div>
+    <div class="popover menu" id="format-menu" role="menu" hidden></div>
+    <div class="popover format-bar" id="format-bar" role="toolbar" hidden></div>
     <div class="popover emoji-picker" id="emoji-picker" hidden></div>
     <div class="popover reaction-viewer" id="reaction-viewer" hidden></div>
     <div

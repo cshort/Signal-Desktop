@@ -411,12 +411,35 @@ const mentionsSchema = z
   .max(MAX_MENTIONS);
 export type SendMentionType = z.infer<typeof mentionsSchema>[number];
 
+// Fork addition: text styles, as Signal's composer formatting menu sets them
+// (the same names messages carry in `formatting`).
+export const MAX_FORMATTING_RANGES = 1000;
+const formattingSchema = z
+  .array(
+    z
+      .object({
+        start: z.number().int().min(0).max(MAX_SEND_BODY_LENGTH),
+        length: z.number().int().min(1).max(MAX_SEND_BODY_LENGTH),
+        style: z.enum([
+          'bold',
+          'italic',
+          'strikethrough',
+          'monospace',
+          'spoiler',
+        ]),
+      })
+      .strict()
+  )
+  .max(MAX_FORMATTING_RANGES);
+export type SendFormattingType = z.infer<typeof formattingSchema>[number];
+
 export const messagesSendTextParamsSchema = z
   .object({
     conversationId: conversationIdSchema,
     body: z.string().max(MAX_SEND_BODY_LENGTH),
-    // Fork addition: mentions of group members.
+    // Fork addition: mentions of group members, and text styles.
     mentions: mentionsSchema.optional(),
+    formatting: formattingSchema.optional(),
     // Reply to this message (it must be in the same conversation), quoting
     // it as Signal's own reply does.
     quoteMessageId: messageIdSchema.optional(),
@@ -609,6 +632,7 @@ export const messagesEditParamsSchema = z
     messageId: messageIdSchema,
     body: z.string().min(1).max(MAX_SEND_BODY_LENGTH),
     mentions: mentionsSchema.optional(),
+    formatting: formattingSchema.optional(),
   })
   .strict();
 export type MessagesEditParamsType = z.infer<typeof messagesEditParamsSchema>;
