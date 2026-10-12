@@ -37,6 +37,7 @@ export const CAPABILITIES = [
   // Fork-only (Better Signal): reactions, attachment content.
   'messages.react',
   'attachments.read',
+  'settings.manage',
 ];
 
 // Signal answers at most 16 requests at once per app.

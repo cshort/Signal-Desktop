@@ -46,6 +46,8 @@ export const Capability = {
   ProfileRead: 'profile.read',
   // Let the app show Signal's message notifications instead of Signal.
   NotificationsManage: 'notifications.manage',
+  // Fork addition: read and change Signal's settings, as its Settings page.
+  SettingsManage: 'settings.manage',
 } as const;
 export type CapabilityType = (typeof Capability)[keyof typeof Capability];
 export const ALL_CAPABILITIES: ReadonlyArray<CapabilityType> =
@@ -61,6 +63,7 @@ export const IMPLEMENTED_CAPABILITIES: ReadonlyArray<CapabilityType> = [
   Capability.MessagesReact,
   Capability.AttachmentsRead,
   Capability.NotificationsManage,
+  Capability.SettingsManage,
 ];
 
 export const ErrorCode = {
@@ -132,6 +135,8 @@ export const Method = {
   StickersGetPacks: 'stickers.getPacks',
   StickersGetImage: 'stickers.getImage',
   MessagesSendSticker: 'messages.sendSticker',
+  SettingsGet: 'settings.get',
+  SettingsSet: 'settings.set',
 } as const;
 export type MethodType = (typeof Method)[keyof typeof Method];
 
@@ -163,6 +168,8 @@ export const SERVICE_METHOD_CAPABILITIES = {
   [Method.StickersGetPacks]: Capability.MessagesSend,
   [Method.StickersGetImage]: Capability.MessagesSend,
   [Method.MessagesSendSticker]: Capability.MessagesSend,
+  [Method.SettingsGet]: Capability.SettingsManage,
+  [Method.SettingsSet]: Capability.SettingsManage,
 } as const satisfies Partial<Record<MethodType, CapabilityType>>;
 export type ServiceMethodType = keyof typeof SERVICE_METHOD_CAPABILITIES;
 
@@ -815,6 +822,84 @@ export type MessagesSendStickerParamsType = z.infer<
   typeof messagesSendStickerParamsSchema
 >;
 
+// Fork addition: Signal's Settings, the parts that make sense for a
+// linked computer without a screen. Each is Signal's own item, changed the
+// way its Settings page changes it, so account-wide ones sync to the phone.
+// Unlinking, deleting data, changing number and backups stay in Signal.
+export const SKIN_TONES = [
+  '',
+  '1F3FB',
+  '1F3FC',
+  '1F3FD',
+  '1F3FE',
+  '1F3FF',
+] as const;
+
+export const settingsGetParamsSchema = z.object({}).strict();
+
+const autoDownloadSchema = z
+  .object({
+    photos: z.boolean(),
+    videos: z.boolean(),
+    audio: z.boolean(),
+    documents: z.boolean(),
+  })
+  .strict();
+
+export const settingsSetParamsSchema = z.discriminatedUnion('key', [
+  z.object({ key: z.literal('emojiSkinTone'), value: z.enum(SKIN_TONES) }),
+  z.object({ key: z.literal('linkPreviews'), value: z.boolean() }),
+  z.object({
+    key: z.literal('sentMediaQuality'),
+    value: z.enum(['standard', 'high']),
+  }),
+  z.object({ key: z.literal('keepMutedChatsArchived'), value: z.boolean() }),
+  z.object({ key: z.literal('readReceipts'), value: z.boolean() }),
+  z.object({ key: z.literal('typingIndicators'), value: z.boolean() }),
+  z.object({ key: z.literal('sealedSenderIndicators'), value: z.boolean() }),
+  z.object({
+    key: z.literal('disappearingMessagesSeconds'),
+    // Up to Signal's longest custom timer (a year).
+    value: z
+      .number()
+      .int()
+      .min(0)
+      .max(366 * 24 * 60 * 60),
+  }),
+  z.object({
+    key: z.literal('phoneNumberSharing'),
+    value: z.enum(['everybody', 'nobody']),
+  }),
+  z.object({ key: z.literal('phoneNumberDiscoverable'), value: z.boolean() }),
+  z.object({
+    key: z.literal('notificationContent'),
+    value: z.enum(['message', 'name', 'count', 'off']),
+  }),
+  z.object({ key: z.literal('notificationSound'), value: z.boolean() }),
+  z.object({ key: z.literal('reactionNotifications'), value: z.boolean() }),
+  z.object({ key: z.literal('autoDownload'), value: autoDownloadSchema }),
+]);
+export type SettingsSetParamsType = z.infer<typeof settingsSetParamsSchema>;
+
+export type SettingsDTO = Readonly<{
+  emojiSkinTone: (typeof SKIN_TONES)[number];
+  linkPreviews: boolean;
+  sentMediaQuality: 'standard' | 'high';
+  keepMutedChatsArchived: boolean;
+  readReceipts: boolean;
+  typingIndicators: boolean;
+  sealedSenderIndicators: boolean;
+  disappearingMessagesSeconds: number;
+  phoneNumberSharing: 'everybody' | 'nobody';
+  phoneNumberDiscoverable: boolean;
+  notificationContent: 'message' | 'name' | 'count' | 'off';
+  notificationSound: boolean;
+  reactionNotifications: boolean;
+  autoDownload: z.infer<typeof autoDownloadSchema>;
+}>;
+
+export type SettingsGetResultType = Readonly<{ settings: SettingsDTO }>;
+
 export const notificationsSetHandledParamsSchema = z
   .object({
     handled: z.boolean(),
@@ -874,6 +959,8 @@ export const SERVICE_PARAM_SCHEMAS = {
   [Method.StickersGetPacks]: stickersGetPacksParamsSchema,
   [Method.StickersGetImage]: stickersGetImageParamsSchema,
   [Method.MessagesSendSticker]: messagesSendStickerParamsSchema,
+  [Method.SettingsGet]: settingsGetParamsSchema,
+  [Method.SettingsSet]: settingsSetParamsSchema,
 } as const satisfies Record<ServiceMethodType, z.ZodType>;
 
 export type ConversationsListParamsType = z.infer<

@@ -426,6 +426,8 @@ function getCapabilityLabel(
       return i18n('icu:ExternalClientCapability__attachments-read');
     case Capability.NotificationsManage:
       return i18n('icu:ExternalClientCapability__notifications-manage');
+    case Capability.SettingsManage:
+      return i18n('icu:ExternalClientCapability__settings-manage');
     default:
       // Only implemented capabilities can be requested; see protocol.std.ts.
       return capability;

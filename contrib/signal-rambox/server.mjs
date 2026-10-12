@@ -79,6 +79,8 @@ const STATIC_FILES = {
       [`status/${name}.svg`, 'image/svg+xml'],
     ])
   ),
+  // Signal's notification sound.
+  'sounds/notification.ogg': ['sounds/notification.ogg', 'audio/ogg'],
 };
 
 const SECURITY_HEADERS = {
@@ -492,6 +494,20 @@ export function createWebServer({
       }
       emojiCatalog ??= await bridge.call('emoji.getCatalog', {});
       sendJson(res, 200, emojiCatalog);
+      return;
+    }
+    if (req.method === 'GET' && route === 'api/settings') {
+      sendJson(res, 200, await bridge.call('settings.get', {}));
+      return;
+    }
+    if (req.method === 'POST' && route === 'api/settings') {
+      const { key, value } = await readJson(req);
+      const result = await bridge.call('settings.set', { key, value });
+      if (key === 'emojiSkinTone') {
+        // The catalog comes in the default skin tone.
+        emojiCatalog = null;
+      }
+      sendJson(res, 200, result);
       return;
     }
     if (req.method === 'POST' && route === 'api/react') {

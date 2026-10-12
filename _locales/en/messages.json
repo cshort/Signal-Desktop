@@ -4570,6 +4570,10 @@
     "messageformat": "Show message notifications instead of Signal while it is connected",
     "description": "Permission shown in the local app access dialog"
   },
+  "icu:ExternalClientCapability__settings-manage": {
+    "messageformat": "See and change your Signal settings, including privacy settings that apply to all your devices",
+    "description": "Permission shown in the local app access dialog"
+  },
   "icu:Preferences__external-clients--title": {
     "messageformat": "Apps on this computer",
     "description": "Privacy settings: heading of the section about local apps that can connect to Signal Desktop"

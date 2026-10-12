@@ -21,6 +21,7 @@ import {
   MAX_MENTIONS,
   pollsSendParamsSchema,
   pollsVoteParamsSchema,
+  settingsSetParamsSchema,
   requestEnvelopeSchema,
 } from '../../externalClient/protocol.std.ts';
 
@@ -248,6 +249,33 @@ describe('externalClient/protocol', () => {
           conversationId,
           body: 'hi',
           mentions: Array.from({ length: MAX_MENTIONS + 1 }, () => mention),
+        })
+      );
+    });
+
+    it('takes only known settings with values of their own kind', () => {
+      assert.isTrue(
+        accepts(settingsSetParamsSchema, { key: 'readReceipts', value: false })
+      );
+      assert.isTrue(
+        accepts(settingsSetParamsSchema, {
+          key: 'emojiSkinTone',
+          value: '1F3FD',
+        })
+      );
+      assert.isFalse(
+        accepts(settingsSetParamsSchema, { key: 'readReceipts', value: 'no' })
+      );
+      assert.isFalse(
+        accepts(settingsSetParamsSchema, { key: 'emojiSkinTone', value: 'x' })
+      );
+      assert.isFalse(
+        accepts(settingsSetParamsSchema, { key: 'deleteAllData', value: true })
+      );
+      assert.isFalse(
+        accepts(settingsSetParamsSchema, {
+          key: 'disappearingMessagesSeconds',
+          value: -1,
         })
       );
     });

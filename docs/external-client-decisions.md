@@ -429,3 +429,32 @@ picker with Recently used and one tab per pack; picking a sticker sends it,
 as in Signal. Installing packs stays in Signal.
 
 WHY: Mike found stickers could be seen but not sent (2026-10-11 23:28 PT).
+
+## F11. Fork only: Settings, and the emoji skin tone
+
+DECISION: A new capability, `settings.manage` (one more line in Signal's
+approval dialog), allows `settings.get` and `settings.set {key, value}`
+for a fixed list of Signal's settings, each changed the way Signal's own
+Settings page changes it (state/smart/Preferences.preload.tsx), so the
+account-wide ones sync to the phone and other devices:
+
+- Chats: default emoji skin tone, link previews, sent media quality, and
+  keep muted chats archived.
+- Notifications: notification content and sound (the page's own
+  notifications follow both), and reaction notifications.
+- Privacy: read receipts, typing indicators, the default disappearing
+  timer, who can see and who can find my number (with Signal's rule that
+  "everyone can see" makes it findable), and the sealed sender status icon.
+- Data usage: media auto-download.
+
+The page has a Settings dialog with Signal's sections, plus Appearance
+(the page's light/dark/system theme, kept in the browser), and a skin tone
+button in the emoji picker. Unlinking devices, deleting data, changing
+number and backups stay in Signal, so a browser tab can't lock Mike out.
+Desktop-window settings (launch at login, tray, zoom, spell check) don't
+apply to a computer without a screen and are left out. Stories on/off is
+left out for now: Signal's own switch deletes your stories in a way that
+needs its confirmation dialog.
+
+WHY: Mike needed the emoji skin tone and asked for the whole Settings menu
+(2026-10-12 09:44 PT).

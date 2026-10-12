@@ -2277,6 +2277,197 @@ label.poll-option {
   background: var(--hover);
 }
 
+/* Skin tone, in the emoji picker and in Settings. */
+.emoji-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.emoji-head .emoji-search {
+  flex: 1;
+  min-width: 0;
+}
+
+.emoji-tone-button,
+.tone {
+  width: 36px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 22px;
+}
+
+.emoji-tone-button:hover,
+.tone:hover,
+.tone.active {
+  background: var(--hover);
+}
+
+.tone.active {
+  outline: 2px solid var(--accent);
+}
+
+.tone-picker {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+
+/* Settings, laid out as Signal's: sections on the left, the page beside. */
+.settings-modal {
+  width: min(760px, calc(100vw - 32px));
+  height: min(620px, calc(100vh - 48px));
+}
+
+.settings-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+}
+
+.settings-nav {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  width: 200px;
+  padding: 8px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.settings-tab {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+}
+
+.settings-tab:hover {
+  background: var(--hover);
+}
+
+.settings-tab.active {
+  background: var(--selected);
+  font-weight: 600;
+}
+
+.settings-page {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 20px 20px;
+  overflow-y: auto;
+}
+
+.settings-heading {
+  margin: 8px 0 12px;
+  font-size: 18px;
+  line-height: 24px;
+}
+
+.setting-heading {
+  margin: 12px 0 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.setting-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.setting-desc {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.setting-note {
+  color: var(--muted);
+}
+
+.setting-select {
+  max-width: 50%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.switch {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 22px;
+  margin: 0;
+  border-radius: 11px;
+  background: var(--selected);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s;
+}
+
+.switch:checked {
+  background: var(--accent);
+}
+
+.switch:checked::after {
+  transform: translateX(18px);
+}
+
+.switch:disabled,
+.setting-select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (max-width: 600px) {
+  .settings-body {
+    flex-direction: column;
+  }
+  .settings-nav {
+    flex-direction: row;
+    width: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .settings-tab {
+    flex: none;
+  }
+}
+
 /* Signal's sticker picker: a pack's stickers, with packs as tabs below. */
 .sticker-picker {
   flex-direction: column;

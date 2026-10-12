@@ -107,6 +107,22 @@ export class FakeBridge {
   // conversationId -> [{ conversationId, author }]
   members = new Map();
   stickers = { packs: [], recents: [] };
+  settings = {
+    emojiSkinTone: '',
+    linkPreviews: true,
+    sentMediaQuality: 'standard',
+    keepMutedChatsArchived: false,
+    readReceipts: true,
+    typingIndicators: true,
+    sealedSenderIndicators: false,
+    disappearingMessagesSeconds: 0,
+    phoneNumberSharing: 'nobody',
+    phoneNumberDiscoverable: true,
+    notificationContent: 'message',
+    notificationSound: false,
+    reactionNotifications: true,
+    autoDownload: { photos: true, videos: true, audio: true, documents: true },
+  };
   calls = [];
   notificationsHandled = false;
   // conversationId -> reason, for messages.sendText refusals
@@ -120,6 +136,7 @@ export class FakeBridge {
     'messages.react',
     'attachments.read',
     'notifications.manage',
+    'settings.manage',
   ];
   // `${messageId}:${index}` -> { contentType, bytes }
   attachments = new Map();
@@ -292,6 +309,13 @@ export class FakeBridge {
           conversations: this.conversations,
           nextCursor: null,
         });
+        return;
+      case 'settings.get':
+        this.#reply(session, id, { settings: this.settings });
+        return;
+      case 'settings.set':
+        this.settings = { ...this.settings, [params.key]: params.value };
+        this.#reply(session, id, { settings: this.settings });
         return;
       case 'stickers.getPacks':
         this.#reply(session, id, this.stickers);

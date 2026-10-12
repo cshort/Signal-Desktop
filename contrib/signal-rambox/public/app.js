@@ -144,6 +144,8 @@ const ICONS = {
   search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM16 16l4.5 4.5',
   file: 'M6 3h8l4 4v14H6zM14 3v4h4',
   poll: 'M5 20V11M12 20V4M19 20v-6',
+  settings:
+    'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z',
   sticker:
     'M20 12V8a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v8a4 4 0 0 0 4 4h4m8-8-8 8m8-8h-4a4 4 0 0 0-4 4v4',
   'cat-recent': 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3 2',
@@ -1663,9 +1665,445 @@ async function openEmojiPicker(anchorElement, onPick) {
     }
   });
 
-  picker.replaceChildren(search, body, tabs);
+  // Signal's skin tone choice, beside the search box.
+  const head = el('div', 'emoji-head');
+  head.append(search);
+  if (canManageSettings() && signalSettings) {
+    const current =
+      SKIN_TONE_HANDS.find(([tone]) => tone === signalSettings.emojiSkinTone) ??
+      SKIN_TONE_HANDS[0];
+    const toneButton = el('button', 'emoji-tone-button');
+    toneButton.type = 'button';
+    toneButton.title = 'Skin tone';
+    toneButton.setAttribute('aria-label', 'Skin tone');
+    toneButton.append(el('span', 'emoji', current[1]));
+    const tones = skinTonePicker(signalSettings.emojiSkinTone, async tone => {
+      await changeSetting('emojiSkinTone', tone);
+      openEmojiPicker(anchorElement, onPick);
+    });
+    tones.hidden = true;
+    toneButton.addEventListener('click', ev => {
+      ev.stopPropagation();
+      tones.hidden = !tones.hidden;
+    });
+    head.append(toneButton);
+    picker.replaceChildren(head, tones, body, tabs);
+  } else {
+    picker.replaceChildren(head, body, tabs);
+  }
   placePopover(picker, anchor);
   search.focus();
+}
+
+// --- settings -------------------------------------------------------------------
+
+// Signal's own settings (the ones that make sense here), plus the page's
+// theme. Account-wide ones change on every device, as in Signal.
+let signalSettings = null;
+let settingsSection = 'chats';
+
+const SKIN_TONE_HANDS = [
+  ['', '✋', 'Default (yellow)'],
+  ['1F3FB', '✋🏻', 'Light'],
+  ['1F3FC', '✋🏼', 'Medium-light'],
+  ['1F3FD', '✋🏽', 'Medium'],
+  ['1F3FE', '✋🏾', 'Medium-dark'],
+  ['1F3FF', '✋🏿', 'Dark'],
+];
+
+const DISAPPEARING_CHOICES = [
+  [0, 'Off'],
+  [4 * 7 * 86400, '4 weeks'],
+  [7 * 86400, '1 week'],
+  [86400, '1 day'],
+  [8 * 3600, '8 hours'],
+  [3600, '1 hour'],
+  [300, '5 minutes'],
+  [30, '30 seconds'],
+];
+
+function canManageSettings() {
+  return capabilities.includes('settings.manage');
+}
+
+async function loadSettings() {
+  if (!canManageSettings()) {
+    signalSettings = null;
+    return null;
+  }
+  try {
+    ({ settings: signalSettings } = await api('api/settings'));
+  } catch {
+    // Older Signal: the page works without them.
+  }
+  return signalSettings;
+}
+
+async function changeSetting(key, value) {
+  try {
+    ({ settings: signalSettings } = await api('api/settings', { key, value }));
+    if (key === 'emojiSkinTone') {
+      emojiCatalog = null;
+    }
+  } catch (error) {
+    toast(`Not changed (${error.code ?? error.message}).`);
+  }
+  renderSettings();
+}
+
+// The page's theme: Signal's light or dark, or the system's.
+function pageTheme() {
+  try {
+    return localStorage.getItem('theme') ?? 'system';
+  } catch {
+    return 'system';
+  }
+}
+
+// The stylesheet's dark rules, by their original media query.
+const darkRuleMedia = new WeakMap();
+
+function applyTheme(theme) {
+  document.documentElement.style.colorScheme =
+    theme === 'system' ? 'light dark' : theme;
+  for (const sheet of document.styleSheets) {
+    let rules;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+    for (const rule of rules) {
+      if (!(rule instanceof CSSMediaRule)) {
+        continue;
+      }
+      if (!darkRuleMedia.has(rule)) {
+        darkRuleMedia.set(rule, rule.media.mediaText);
+      }
+      const media = darkRuleMedia.get(rule);
+      if (!media.includes('prefers-color-scheme: dark')) {
+        continue;
+      }
+      // The dark rules apply always, never, or as the system says.
+      rule.media.mediaText =
+        theme === 'dark' ? 'all' : theme === 'light' ? 'not all' : media;
+    }
+  }
+}
+
+function setPageTheme(theme) {
+  try {
+    localStorage.setItem('theme', theme);
+  } catch {
+    // Storage blocked; the theme still applies until reload.
+  }
+  applyTheme(theme);
+  renderSettings();
+}
+
+function settingRow(label, description, control) {
+  const row = el('div', 'setting-row');
+  const text = el('div', 'setting-text');
+  text.append(el('div', 'setting-label', label));
+  if (description) {
+    text.append(el('div', 'setting-desc', description));
+  }
+  row.append(text, control);
+  return row;
+}
+
+function settingSwitch(checked, onChange, disabled = false) {
+  const input = el('input', 'switch');
+  input.type = 'checkbox';
+  input.setAttribute('role', 'switch');
+  input.checked = checked;
+  input.disabled = disabled;
+  input.addEventListener('change', () => onChange(input.checked));
+  return input;
+}
+
+function settingSelect(value, choices, onChange, disabled = false) {
+  const select = el('select', 'setting-select');
+  for (const [v, label] of choices) {
+    const option = el('option', '', label);
+    option.value = String(v);
+    option.selected = String(v) === String(value);
+    select.append(option);
+  }
+  select.disabled = disabled;
+  select.addEventListener('change', () => onChange(select.value));
+  return select;
+}
+
+function skinTonePicker(value, onPick) {
+  const row = el('div', 'tone-picker');
+  for (const [tone, hand, label] of SKIN_TONE_HANDS) {
+    const b = el('button', `tone${tone === value ? ' active' : ''}`);
+    b.type = 'button';
+    b.title = label;
+    b.setAttribute('aria-label', label);
+    b.setAttribute('aria-pressed', String(tone === value));
+    b.append(el('span', 'emoji', hand));
+    b.addEventListener('click', ev => {
+      ev.stopPropagation();
+      onPick(tone);
+    });
+    row.append(b);
+  }
+  return row;
+}
+
+function settingsSections() {
+  const s = signalSettings;
+  const set = (key, value) => changeSetting(key, value);
+  const sections = [
+    {
+      id: 'appearance',
+      title: 'Appearance',
+      rows: () => [
+        settingRow(
+          'Theme',
+          'For this page. Signal on your phone keeps its own.',
+          settingSelect(
+            pageTheme(),
+            [
+              ['system', 'System'],
+              ['light', 'Light'],
+              ['dark', 'Dark'],
+            ],
+            setPageTheme
+          )
+        ),
+      ],
+    },
+  ];
+  if (!s) {
+    return sections;
+  }
+  sections.push(
+    {
+      id: 'chats',
+      title: 'Chats',
+      rows: () => [
+        settingRow(
+          'Default emoji skin tone',
+          'Used for emoji with skin tones in the emoji picker.',
+          skinTonePicker(s.emojiSkinTone, tone => set('emojiSkinTone', tone))
+        ),
+        settingRow(
+          'Generate link previews',
+          'Retrieve link previews directly from websites for messages you send. Applies to all your devices.',
+          settingSwitch(s.linkPreviews, v => set('linkPreviews', v))
+        ),
+        settingRow(
+          'Sent media quality',
+          'High quality sends photos and videos at full resolution.',
+          settingSelect(
+            s.sentMediaQuality,
+            [
+              ['standard', 'Standard'],
+              ['high', 'High'],
+            ],
+            v => set('sentMediaQuality', v)
+          )
+        ),
+        settingRow(
+          'Keep muted chats archived',
+          'Muted chats that are archived will remain archived when a new message arrives.',
+          settingSwitch(s.keepMutedChatsArchived, v =>
+            set('keepMutedChatsArchived', v)
+          )
+        ),
+      ],
+    },
+    {
+      id: 'notifications',
+      title: 'Notifications',
+      rows: () => [
+        settingRow(
+          'Notification content',
+          'What this page shows when a message arrives.',
+          settingSelect(
+            s.notificationContent,
+            [
+              ['message', 'Name, content, and actions'],
+              ['name', 'Name only'],
+              ['count', 'No name or content'],
+              ['off', 'Off'],
+            ],
+            v => set('notificationContent', v)
+          )
+        ),
+        settingRow(
+          'Notification sound',
+          "Play Signal's sound with each notification.",
+          settingSwitch(s.notificationSound, v => set('notificationSound', v))
+        ),
+        settingRow(
+          'Reaction notifications',
+          'Notify when someone reacts to your messages. Applies to all your devices.',
+          settingSwitch(s.reactionNotifications, v =>
+            set('reactionNotifications', v)
+          )
+        ),
+      ],
+    },
+    {
+      id: 'privacy',
+      title: 'Privacy',
+      rows: () => [
+        settingRow(
+          'Read receipts',
+          "If read receipts are disabled, you won't be able to see read receipts from others. Applies to all your devices.",
+          settingSwitch(s.readReceipts, v => set('readReceipts', v))
+        ),
+        settingRow(
+          'Typing indicators',
+          "If typing indicators are disabled, you won't be able to see typing indicators from others. Applies to all your devices.",
+          settingSwitch(s.typingIndicators, v => set('typingIndicators', v))
+        ),
+        settingRow(
+          'Default timer for new chats',
+          'Set a default disappearing message timer for all new chats started by you.',
+          settingSelect(
+            s.disappearingMessagesSeconds,
+            DISAPPEARING_CHOICES.some(
+              ([v]) => v === s.disappearingMessagesSeconds
+            )
+              ? DISAPPEARING_CHOICES
+              : [
+                  ...DISAPPEARING_CHOICES,
+                  [s.disappearingMessagesSeconds, 'Custom (set in Signal)'],
+                ],
+            v => set('disappearingMessagesSeconds', Number(v))
+          )
+        ),
+        settingRow(
+          'Who can see my phone number',
+          'Applies to all your devices.',
+          settingSelect(
+            s.phoneNumberSharing,
+            [
+              ['everybody', 'Everyone'],
+              ['nobody', 'Nobody'],
+            ],
+            v => set('phoneNumberSharing', v)
+          )
+        ),
+        settingRow(
+          'Who can find me by number',
+          s.phoneNumberSharing === 'everybody'
+            ? 'Everyone can, while everyone can see your number.'
+            : 'Applies to all your devices.',
+          settingSelect(
+            s.phoneNumberDiscoverable ? 'everybody' : 'nobody',
+            [
+              ['everybody', 'Everyone'],
+              ['nobody', 'Nobody'],
+            ],
+            v => set('phoneNumberDiscoverable', v === 'everybody'),
+            s.phoneNumberSharing === 'everybody'
+          )
+        ),
+        settingRow(
+          'Show status icon',
+          'Show an icon in message details when messages were delivered using sealed sender. Applies to all your devices.',
+          settingSwitch(s.sealedSenderIndicators, v =>
+            set('sealedSenderIndicators', v)
+          )
+        ),
+      ],
+    },
+    {
+      id: 'data',
+      title: 'Data usage',
+      rows: () => [
+        el(
+          'div',
+          'setting-heading',
+          'Media auto-download (on the computer running Signal)'
+        ),
+        ...[
+          ['photos', 'Images'],
+          ['videos', 'Videos'],
+          ['audio', 'Audio'],
+          ['documents', 'Documents'],
+        ].map(([kind, label]) =>
+          settingRow(
+            label,
+            null,
+            settingSwitch(s.autoDownload[kind], v =>
+              set('autoDownload', { ...s.autoDownload, [kind]: v })
+            )
+          )
+        ),
+      ],
+    }
+  );
+  sections.push({
+    id: 'elsewhere',
+    title: 'In Signal on your phone',
+    rows: () => [
+      el(
+        'p',
+        'setting-note',
+        'Linked devices, backups, changing your number and deleting data stay in Signal itself, so one click in a browser tab can never lock you out.'
+      ),
+    ],
+  });
+  return sections;
+}
+
+function renderSettings() {
+  if ($('settings').hidden) {
+    return;
+  }
+  const sections = settingsSections();
+  const current =
+    sections.find(section => section.id === settingsSection) ?? sections[0];
+  $('settings-nav').replaceChildren(
+    ...sections.map(section => {
+      const b = el(
+        'button',
+        `settings-tab${section === current ? ' active' : ''}`,
+        section.title
+      );
+      b.type = 'button';
+      b.addEventListener('click', () => {
+        settingsSection = section.id;
+        renderSettings();
+      });
+      return b;
+    })
+  );
+  const page = $('settings-page');
+  page.replaceChildren(
+    el('h2', 'settings-heading', current.title),
+    ...current.rows()
+  );
+  if (!signalSettings && canManageSettings()) {
+    page.append(el('p', 'setting-note', "Couldn't load Signal's settings."));
+  } else if (!canManageSettings()) {
+    page.append(
+      el(
+        'p',
+        'setting-note',
+        "Signal's own settings appear here once this page is allowed to manage them (Signal asks when the helper reconnects)."
+      )
+    );
+  }
+}
+
+async function openSettings() {
+  closePopovers();
+  $('settings').hidden = false;
+  renderSettings();
+  await loadSettings();
+  renderSettings();
+}
+
+function closeSettings() {
+  $('settings').hidden = true;
 }
 
 // --- stickers -------------------------------------------------------------------
@@ -1980,16 +2418,32 @@ function notify(m) {
   if (!('Notification' in window) || Notification.permission === 'denied') {
     return;
   }
+  // Signal's "Notification content" setting.
+  const content = signalSettings?.notificationContent ?? 'message';
+  if (content === 'off') {
+    return;
+  }
   const show = () => {
     const text = summarize(m);
-    const body =
+    let title = displayTitle(c);
+    let body =
       c.type === 'group' ? `${nameOf(m.authorConversationId)}: ${text}` : text;
-    const n = new Notification(displayTitle(c), {
+    if (content === 'name') {
+      body = 'New message';
+    } else if (content === 'count') {
+      title = 'Signal';
+      body = 'New message';
+    }
+    if (signalSettings?.notificationSound) {
+      new Audio('sounds/notification.ogg').play().catch(() => {});
+    }
+    const n = new Notification(title, {
       body: body.length > 200 ? `${body.slice(0, 199)}…` : body,
       tag: m.conversationId,
-      icon: c.avatarVersion
-        ? `api/avatar?${new URLSearchParams({ conversationId: c.id, v: c.avatarVersion })}`
-        : 'icon.svg',
+      icon:
+        content !== 'count' && c.avatarVersion
+          ? `api/avatar?${new URLSearchParams({ conversationId: c.id, v: c.avatarVersion })}`
+          : 'icon.svg',
     });
     n.addEventListener('click', () => {
       window.focus();
@@ -2013,6 +2467,7 @@ async function loadState() {
   const state = await api('api/state');
   bridgeState = state.state;
   capabilities = state.capabilities ?? [];
+  loadSettings();
   preferredReactions = null;
   conversations.clear();
   rowCache.clear();
@@ -3075,6 +3530,16 @@ $('compose').addEventListener('paste', e => {
   }
   insertPlain(e.clipboardData?.getData('text/plain') ?? '');
 });
+$('settings-open').append(icon('settings'));
+$('settings-open').addEventListener('click', openSettings);
+$('settings-close').append(icon('close'));
+$('settings-close').addEventListener('click', closeSettings);
+$('settings').addEventListener('click', e => {
+  if (e.target === $('settings')) {
+    closeSettings();
+  }
+});
+applyTheme(pageTheme());
 $('sticker-open').append(icon('sticker'));
 $('sticker-open').addEventListener('click', ev => {
   ev.stopPropagation();
@@ -3632,6 +4097,7 @@ document.addEventListener('keydown', e => {
     } else {
       closePollCompose();
       closePollVotes();
+      closeSettings();
     }
     collapseSidebar();
   }

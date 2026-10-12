@@ -38,6 +38,10 @@ import {
 } from './ExternalClientOutgoing.preload.ts';
 import { getMembers } from './ExternalClientMentions.preload.ts';
 import {
+  getSettings,
+  setSetting,
+} from './ExternalClientPreferences.preload.ts';
+import {
   getStickerImage,
   getStickerPacks,
   sendSticker,
@@ -348,6 +352,17 @@ async function dispatch(
     case Method.StickersGetImage: {
       const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
       return params.success ? getStickerImage(params.data) : invalid;
+    }
+    case Method.SettingsGet: {
+      const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
+      return params.success ? getSettings() : invalid;
+    }
+    case Method.SettingsSet: {
+      if (!window.ConversationController.isInitialFetchComplete()) {
+        return notReady;
+      }
+      const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
+      return params.success ? setSetting(params.data) : invalid;
     }
     case Method.MessagesSendSticker: {
       if (!window.ConversationController.isInitialFetchComplete()) {

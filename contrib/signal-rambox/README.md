@@ -7,7 +7,10 @@ client bridge, signalapp/Signal-Desktop#8054).
 Signal Desktop keeps running, minimized to the tray, and stays the real
 client: it holds the keys, sends and receives. This helper is an approved
 companion app. It shows your chats with their photos, lets you read and send
-text messages, reply with a quote, send stickers from your installed packs, react with your quick-reaction bar (click a reaction to see who sent
+text messages, reply with a quote, send stickers from your installed packs, change Signal's settings (the
+gear by the search box: chats, notifications, privacy, data usage, plus a
+light/dark theme for the page; account-wide ones apply on all your
+devices), react with your quick-reaction bar (click a reaction to see who sent
 it) and @mention people in groups (type @ and pick from the
 members), format text as Signal does (select it, then right-click, use the
 bar above it, or Signal's shortcuts: Ctrl+B, Ctrl+I, Ctrl+Shift+X for
@@ -45,7 +48,8 @@ Photos, member labels, reactions and replies use fork-only bridge additions
 `messages.edit`, `messages.delete`, `attachments.uploadBegin`,
 `attachments.uploadChunk`, `messages.forward`, `emoji.getCatalog`, `polls.vote`, `polls.end`,
 `polls.send`, `conversations.getMembers`, mentions, formatting, `stickers.getPacks`, `stickers.getImage`,
-`messages.sendSticker` and
+`messages.sendSticker`, `settings.get`, `settings.set` (capability
+`settings.manage`) and
 `attachmentUploadIds` on
 `messages.sendText`, and pin order, formatting and link previews on the
 DTOs),

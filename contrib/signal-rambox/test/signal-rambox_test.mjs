@@ -210,6 +210,7 @@ describe('signal-rambox', () => {
       'messages.read',
       'messages.send',
       'notifications.manage',
+      'settings.manage',
     ]);
     assert.equal(req.params.displayName, 'Rambox (signal-rambox)');
   });
@@ -670,6 +671,23 @@ describe('signal-rambox', () => {
     assert.equal(res.status, 200);
     const call = bridge.calls.findLast(c => c.method === 'messages.sendText');
     assert.deepEqual(call.params.mentions, mentions);
+  });
+
+  it("reads and changes Signal's settings", async () => {
+    const got = await http(port, { path: `/${helper.token}/api/settings` });
+    assert.equal(got.status, 200);
+    assert.equal(JSON.parse(got.text).settings.readReceipts, true);
+
+    const changed = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/settings`,
+      headers: json,
+      body: { key: 'readReceipts', value: false },
+    });
+    assert.equal(changed.status, 200);
+    assert.equal(JSON.parse(changed.text).settings.readReceipts, false);
+    const call = bridge.calls.findLast(c => c.method === 'settings.set');
+    assert.deepEqual(call.params, { key: 'readReceipts', value: false });
   });
 
   it('lists sticker packs, serves their images and sends stickers', async () => {

@@ -40,6 +40,13 @@
               aria-label="Filter by unread"
               aria-pressed="false"
             ></button>
+            <button
+              type="button"
+              class="icon-button"
+              id="settings-open"
+              title="Settings"
+              aria-label="Settings"
+            ></button>
           </div>
           <div class="filters" id="filters" role="toolbar"></div>
         </div>
@@ -153,6 +160,28 @@
         <div class="modal-foot">
           <span id="forward-count" class="sub"></span>
           <button type="button" id="forward-send" disabled>Forward</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-backdrop" id="settings" hidden>
+      <div
+        class="modal settings-modal"
+        role="dialog"
+        aria-labelledby="settings-title"
+      >
+        <div class="modal-head">
+          <span id="settings-title">Settings</span>
+          <button
+            type="button"
+            class="icon-button"
+            id="settings-close"
+            title="Close"
+            aria-label="Close"
+          ></button>
+        </div>
+        <div class="settings-body">
+          <nav class="settings-nav" id="settings-nav"></nav>
+          <div class="settings-page" id="settings-page"></div>
         </div>
       </div>
     </div>
