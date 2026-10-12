@@ -22,6 +22,10 @@ import {
   pollsSendParamsSchema,
   pollsVoteParamsSchema,
   settingsSetParamsSchema,
+  profileSetParamsSchema,
+  profileSetAvatarParamsSchema,
+  PROFILE_ABOUT_MAX_BYTES,
+  MAX_PROFILE_AVATAR_BYTES,
   requestEnvelopeSchema,
 } from '../../externalClient/protocol.std.ts';
 
@@ -276,6 +280,38 @@ describe('externalClient/protocol', () => {
         accepts(settingsSetParamsSchema, {
           key: 'disappearingMessagesSeconds',
           value: -1,
+        })
+      );
+    });
+
+    it('takes profile fields and a photo, nothing else', () => {
+      const profile = {
+        firstName: 'Mike',
+        familyName: '',
+        aboutText: 'Hi',
+        aboutEmoji: '',
+      };
+      assert.isTrue(accepts(profileSetParamsSchema, profile));
+      assert.isFalse(
+        accepts(profileSetParamsSchema, { ...profile, username: 'mike.01' })
+      );
+      assert.isFalse(
+        accepts(profileSetParamsSchema, {
+          ...profile,
+          aboutText: 'x'.repeat(PROFILE_ABOUT_MAX_BYTES + 1),
+        })
+      );
+      assert.isTrue(accepts(profileSetAvatarParamsSchema, { data: null }));
+      assert.isTrue(accepts(profileSetAvatarParamsSchema, { data: 'AAAA' }));
+      assert.isFalse(
+        accepts(profileSetAvatarParamsSchema, {
+          data: 'A'.repeat(Math.ceil(MAX_PROFILE_AVATAR_BYTES / 3) * 4 + 4),
+        })
+      );
+      assert.isTrue(
+        accepts(settingsSetParamsSchema, {
+          key: 'storiesEnabled',
+          value: true,
         })
       );
     });

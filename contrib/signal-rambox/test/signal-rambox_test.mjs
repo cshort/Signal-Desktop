@@ -690,6 +690,59 @@ describe('signal-rambox', () => {
     assert.deepEqual(call.params, { key: 'readReceipts', value: false });
   });
 
+  it('reads and saves the profile, and changes its photo', async () => {
+    const got = await http(port, { path: `/${helper.token}/api/profile` });
+    assert.equal(JSON.parse(got.text).profile.firstName, 'Mike');
+
+    const saved = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/profile`,
+      headers: json,
+      body: {
+        firstName: 'Mike',
+        familyName: 'S',
+        aboutText: 'Hi',
+        aboutEmoji: '',
+        username: 'not.passed',
+      },
+    });
+    assert.equal(saved.status, 200);
+    const call = bridge.calls.findLast(c => c.method === 'profile.set');
+    assert.deepEqual(call.params, {
+      firstName: 'Mike',
+      familyName: 'S',
+      aboutText: 'Hi',
+      aboutEmoji: '',
+    });
+
+    const photo = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+    const changed = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/profilePhoto`,
+      headers: { 'content-type': 'application/octet-stream' },
+      body: photo,
+    });
+    assert.equal(changed.status, 200);
+    assert.equal(bridge.profilePhoto, photo.toString('base64'));
+
+    const removed = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/profilePhoto`,
+      headers: { 'content-type': 'application/octet-stream' },
+      body: Buffer.alloc(0),
+    });
+    assert.equal(removed.status, 200);
+    assert.equal(bridge.profilePhoto, null);
+
+    const tooBig = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/profilePhoto`,
+      headers: { 'content-type': 'application/octet-stream' },
+      body: Buffer.alloc(700 * 1024),
+    });
+    assert.equal(tooBig.status, 413);
+  });
+
   it('lists sticker packs, serves their images and sends stickers', async () => {
     bridge.stickers = {
       packs: [

@@ -38,6 +38,11 @@ import {
 } from './ExternalClientOutgoing.preload.ts';
 import { getMembers } from './ExternalClientMentions.preload.ts';
 import {
+  getProfile,
+  setProfile,
+  setProfileAvatar,
+} from './ExternalClientProfile.preload.ts';
+import {
   getSettings,
   setSetting,
 } from './ExternalClientPreferences.preload.ts';
@@ -354,6 +359,10 @@ async function dispatch(
       return params.success ? getStickerImage(params.data) : invalid;
     }
     case Method.SettingsGet: {
+      // The blocked list needs Signal's conversations.
+      if (!window.ConversationController.isInitialFetchComplete()) {
+        return notReady;
+      }
       const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
       return params.success ? getSettings() : invalid;
     }
@@ -370,6 +379,27 @@ async function dispatch(
       }
       const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
       return params.success ? sendSticker(params.data) : invalid;
+    }
+    case Method.ProfileGet: {
+      if (!window.ConversationController.isInitialFetchComplete()) {
+        return notReady;
+      }
+      const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
+      return params.success ? getProfile() : invalid;
+    }
+    case Method.ProfileSet: {
+      if (!window.ConversationController.isInitialFetchComplete()) {
+        return notReady;
+      }
+      const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
+      return params.success ? setProfile(params.data) : invalid;
+    }
+    case Method.ProfileSetAvatar: {
+      if (!window.ConversationController.isInitialFetchComplete()) {
+        return notReady;
+      }
+      const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
+      return params.success ? setProfileAvatar(params.data) : invalid;
     }
     default:
       throw new Error(`Unhandled external client method ${method}`);

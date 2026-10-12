@@ -137,6 +137,9 @@ export const Method = {
   MessagesSendSticker: 'messages.sendSticker',
   SettingsGet: 'settings.get',
   SettingsSet: 'settings.set',
+  ProfileGet: 'profile.get',
+  ProfileSet: 'profile.set',
+  ProfileSetAvatar: 'profile.setAvatar',
 } as const;
 export type MethodType = (typeof Method)[keyof typeof Method];
 
@@ -170,6 +173,9 @@ export const SERVICE_METHOD_CAPABILITIES = {
   [Method.MessagesSendSticker]: Capability.MessagesSend,
   [Method.SettingsGet]: Capability.SettingsManage,
   [Method.SettingsSet]: Capability.SettingsManage,
+  [Method.ProfileGet]: Capability.SettingsManage,
+  [Method.ProfileSet]: Capability.SettingsManage,
+  [Method.ProfileSetAvatar]: Capability.SettingsManage,
 } as const satisfies Partial<Record<MethodType, CapabilityType>>;
 export type ServiceMethodType = keyof typeof SERVICE_METHOD_CAPABILITIES;
 
@@ -878,6 +884,9 @@ export const settingsSetParamsSchema = z.discriminatedUnion('key', [
   z.object({ key: z.literal('notificationSound'), value: z.boolean() }),
   z.object({ key: z.literal('reactionNotifications'), value: z.boolean() }),
   z.object({ key: z.literal('autoDownload'), value: autoDownloadSchema }),
+  // Turning stories off also deletes the stories we shared, as Signal's
+  // confirmation says.
+  z.object({ key: z.literal('storiesEnabled'), value: z.boolean() }),
 ]);
 export type SettingsSetParamsType = z.infer<typeof settingsSetParamsSchema>;
 
@@ -896,9 +905,71 @@ export type SettingsDTO = Readonly<{
   notificationSound: boolean;
   reactionNotifications: boolean;
   autoDownload: z.infer<typeof autoDownloadSchema>;
+  storiesEnabled: boolean;
+  // Signal's Settings > Privacy > Blocked: shown, not changed, there.
+  blocked: ReadonlyArray<BlockedDTO>;
+}>;
+
+export type BlockedDTO = Readonly<{
+  conversationId: string;
+  type: 'direct' | 'group';
+  title: string;
+  // Milliseconds since the epoch, when Signal recorded it.
+  blockedAt: number | null;
+  avatarColor: string | null;
+  avatarVersion: string | null;
 }>;
 
 export type SettingsGetResultType = Readonly<{ settings: SettingsDTO }>;
+
+// Fork addition: Signal's profile editor. Same limits as its editor; the
+// first name is required. The username is shown, not changed (Signal's
+// username flow needs its server round trips and confirmation).
+export const PROFILE_NAME_MAX_GRAPHEMES = 26;
+export const PROFILE_NAME_MAX_BYTES = 128;
+export const PROFILE_ABOUT_MAX_GRAPHEMES = 140;
+export const PROFILE_ABOUT_MAX_BYTES = 512;
+
+export const profileGetParamsSchema = z.object({}).strict();
+
+export const profileSetParamsSchema = z
+  .object({
+    firstName: z.string().max(PROFILE_NAME_MAX_BYTES),
+    familyName: z.string().max(PROFILE_NAME_MAX_BYTES),
+    aboutText: z.string().max(PROFILE_ABOUT_MAX_BYTES),
+    aboutEmoji: z.string().max(64),
+  })
+  .strict();
+export type ProfileSetParamsType = z.infer<typeof profileSetParamsSchema>;
+
+// The new photo as an image file; Signal re-encodes it as a 512px square
+// JPEG, as its avatar editor does. Null removes the photo.
+export const MAX_PROFILE_AVATAR_BYTES = 600 * 1024;
+export const profileSetAvatarParamsSchema = z
+  .object({
+    data: z
+      .string()
+      .max(Math.ceil(MAX_PROFILE_AVATAR_BYTES / 3) * 4)
+      .nullable(),
+  })
+  .strict();
+export type ProfileSetAvatarParamsType = z.infer<
+  typeof profileSetAvatarParamsSchema
+>;
+
+export type ProfileDTO = Readonly<{
+  // Our own conversation (Note to Self); its photo is the profile photo.
+  conversationId: string;
+  firstName: string;
+  familyName: string;
+  aboutText: string;
+  aboutEmoji: string;
+  username: string | null;
+  avatarColor: string | null;
+  avatarVersion: string | null;
+}>;
+
+export type ProfileGetResultType = Readonly<{ profile: ProfileDTO }>;
 
 export const notificationsSetHandledParamsSchema = z
   .object({
@@ -961,6 +1032,9 @@ export const SERVICE_PARAM_SCHEMAS = {
   [Method.MessagesSendSticker]: messagesSendStickerParamsSchema,
   [Method.SettingsGet]: settingsGetParamsSchema,
   [Method.SettingsSet]: settingsSetParamsSchema,
+  [Method.ProfileGet]: profileGetParamsSchema,
+  [Method.ProfileSet]: profileSetParamsSchema,
+  [Method.ProfileSetAvatar]: profileSetAvatarParamsSchema,
 } as const satisfies Record<ServiceMethodType, z.ZodType>;
 
 export type ConversationsListParamsType = z.infer<

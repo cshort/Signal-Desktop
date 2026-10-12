@@ -122,7 +122,21 @@ export class FakeBridge {
     notificationSound: false,
     reactionNotifications: true,
     autoDownload: { photos: true, videos: true, audio: true, documents: true },
+    storiesEnabled: true,
+    blocked: [],
   };
+  profile = {
+    conversationId: 'me',
+    firstName: 'Mike',
+    familyName: '',
+    aboutText: '',
+    aboutEmoji: '',
+    username: null,
+    avatarColor: 'A120',
+    avatarVersion: null,
+  };
+  // The last profile.setAvatar data (base64, or null to remove).
+  profilePhoto = undefined;
   calls = [];
   notificationsHandled = false;
   // conversationId -> reason, for messages.sendText refusals
@@ -312,6 +326,17 @@ export class FakeBridge {
         return;
       case 'settings.get':
         this.#reply(session, id, { settings: this.settings });
+        return;
+      case 'profile.get':
+        this.#reply(session, id, { profile: this.profile });
+        return;
+      case 'profile.set':
+        this.profile = { ...this.profile, ...params };
+        this.#reply(session, id, { profile: this.profile });
+        return;
+      case 'profile.setAvatar':
+        this.profilePhoto = params.data;
+        this.#reply(session, id, { profile: this.profile });
         return;
       case 'settings.set':
         this.settings = { ...this.settings, [params.key]: params.value };

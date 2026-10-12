@@ -1700,7 +1700,11 @@ async function openEmojiPicker(anchorElement, onPick) {
 // Signal's own settings (the ones that make sense here), plus the page's
 // theme. Account-wide ones change on every device, as in Signal.
 let signalSettings = null;
-let settingsSection = 'chats';
+let settingsSection = 'profile';
+// Signal's profile (profile.get), and the edits not saved yet.
+let signalProfile = null;
+let profileDraft = null;
+let profileSaving = false;
 
 const SKIN_TONE_HANDS = [
   ['', '✋', 'Default (yellow)'],
@@ -1737,6 +1741,311 @@ async function loadSettings() {
     // Older Signal: the page works without them.
   }
   return signalSettings;
+}
+
+async function loadProfile() {
+  if (!canManageSettings()) {
+    signalProfile = null;
+    return;
+  }
+  try {
+    ({ profile: signalProfile } = await api('api/profile'));
+    profileDraft = null;
+  } catch {
+    // Older Signal: no profile editor.
+  }
+}
+
+const PROFILE_FIELDS = ['firstName', 'familyName', 'aboutText', 'aboutEmoji'];
+
+function profileValues() {
+  return profileDraft ?? signalProfile;
+}
+
+function editProfile(field, value) {
+  profileDraft = { ...profileValues(), [field]: value };
+}
+
+function profileChanged() {
+  return (
+    profileDraft !== null &&
+    PROFILE_FIELDS.some(field => profileDraft[field] !== signalProfile[field])
+  );
+}
+
+async function saveProfile() {
+  const draft = profileValues();
+  if (draft.firstName.trim() === '') {
+    toast('Your first name is required.');
+    return;
+  }
+  profileSaving = true;
+  renderSettings();
+  try {
+    ({ profile: signalProfile } = await api(
+      'api/profile',
+      Object.fromEntries(PROFILE_FIELDS.map(field => [field, draft[field]]))
+    ));
+    profileDraft = null;
+    toast('Profile saved.');
+  } catch (error) {
+    toast(
+      error.code === 'INVALID_ARGUMENT'
+        ? 'Not saved: a name is up to 26 characters, about up to 140.'
+        : `Not saved (${error.code ?? error.message}).`
+    );
+  }
+  profileSaving = false;
+  renderSettings();
+}
+
+// As Signal's avatar editor: a centered square, at most 512 pixels.
+async function squarePhoto(file) {
+  const bitmap = await createImageBitmap(file);
+  const side = Math.min(bitmap.width, bitmap.height);
+  const out = Math.min(side, 512);
+  const canvas = document.createElement('canvas');
+  canvas.width = out;
+  canvas.height = out;
+  canvas
+    .getContext('2d')
+    .drawImage(
+      bitmap,
+      (bitmap.width - side) / 2,
+      (bitmap.height - side) / 2,
+      side,
+      side,
+      0,
+      0,
+      out,
+      out
+    );
+  bitmap.close();
+  return new Promise((resolve, reject) =>
+    canvas.toBlob(
+      blob => (blob ? resolve(blob) : reject(new Error('not an image'))),
+      'image/jpeg',
+      0.9
+    )
+  );
+}
+
+// photo: a Blob, or null to remove it.
+async function changeProfilePhoto(photo) {
+  profileSaving = true;
+  renderSettings();
+  try {
+    const res = await fetch('api/profilePhoto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: photo ?? new Blob([]),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw Object.assign(new Error(`HTTP ${res.status}`), {
+        code: data.error?.code,
+      });
+    }
+    signalProfile = data.profile;
+    toast(photo ? 'Photo changed.' : 'Photo removed.');
+  } catch (error) {
+    toast(`Photo not changed (${error.code ?? error.message}).`);
+  }
+  profileSaving = false;
+  renderSettings();
+}
+
+function pickProfilePhoto() {
+  const input = el('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.addEventListener('change', async () => {
+    const [file] = input.files;
+    if (!file) {
+      return;
+    }
+    let photo;
+    try {
+      photo = await squarePhoto(file);
+    } catch {
+      toast("That file isn't a picture this browser can read.");
+      return;
+    }
+    await changeProfilePhoto(photo);
+  });
+  input.click();
+}
+
+function profileInput(field, placeholder, maxLength) {
+  const input = el('input', 'setting-input');
+  input.type = 'text';
+  input.placeholder = placeholder;
+  input.maxLength = maxLength;
+  input.value = profileValues()[field];
+  input.disabled = profileSaving;
+  input.addEventListener('input', () => {
+    editProfile(field, input.value);
+    $('profile-save').disabled = profileSaving || !profileChanged();
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && profileChanged()) {
+      saveProfile();
+    }
+  });
+  return input;
+}
+
+function profileRows() {
+  const p = profileValues();
+  const photo = el('div', 'profile-photo');
+  photo.append(
+    avatar(
+      signalProfile.conversationId,
+      {
+        title: [signalProfile.firstName, signalProfile.familyName].join(' '),
+        avatarColor: signalProfile.avatarColor,
+        avatarVersion: signalProfile.avatarVersion,
+      },
+      80
+    )
+  );
+  const photoButtons = el('div', 'profile-photo-buttons');
+  const change = el('button', 'setting-button', 'Change photo');
+  change.type = 'button';
+  change.disabled = profileSaving;
+  change.addEventListener('click', pickProfilePhoto);
+  photoButtons.append(change);
+  if (signalProfile.avatarVersion) {
+    const remove = el('button', 'setting-button', 'Remove photo');
+    remove.type = 'button';
+    remove.disabled = profileSaving;
+    remove.addEventListener('click', () => {
+      if (confirm('Remove your profile photo?')) {
+        changeProfilePhoto(null);
+      }
+    });
+    photoButtons.append(remove);
+  }
+  photo.append(photoButtons);
+
+  const names = el('div', 'profile-fields');
+  names.append(
+    profileInput('firstName', 'First name (required)', 26),
+    profileInput('familyName', 'Last name (optional)', 26)
+  );
+
+  const about = el('div', 'profile-fields profile-about');
+  const emoji = el('button', 'profile-emoji');
+  emoji.type = 'button';
+  emoji.title = 'About emoji';
+  emoji.disabled = profileSaving;
+  if (p.aboutEmoji) {
+    emoji.append(el('span', 'emoji', p.aboutEmoji));
+  } else {
+    emoji.append(icon('react'));
+  }
+  emoji.addEventListener('click', ev => {
+    ev.stopPropagation();
+    openEmojiPicker(emoji, picked => {
+      closePopovers();
+      editProfile('aboutEmoji', picked);
+      renderSettings();
+    });
+  });
+  about.append(
+    emoji,
+    profileInput('aboutText', 'Write a few words about yourself', 140)
+  );
+  if (p.aboutEmoji || p.aboutText) {
+    const clear = el('button', 'setting-button', 'Clear');
+    clear.type = 'button';
+    clear.disabled = profileSaving;
+    clear.addEventListener('click', () => {
+      editProfile('aboutEmoji', '');
+      editProfile('aboutText', '');
+      renderSettings();
+    });
+    about.append(clear);
+  }
+
+  const actions = el('div', 'profile-actions');
+  const save = el(
+    'button',
+    'setting-button primary',
+    profileSaving ? 'Saving…' : 'Save'
+  );
+  save.id = 'profile-save';
+  save.type = 'button';
+  save.disabled = profileSaving || !profileChanged();
+  save.addEventListener('click', saveProfile);
+  actions.append(save);
+  if (profileDraft) {
+    const cancel = el('button', 'setting-button', 'Cancel');
+    cancel.type = 'button';
+    cancel.disabled = profileSaving;
+    cancel.addEventListener('click', () => {
+      profileDraft = null;
+      renderSettings();
+    });
+    actions.append(cancel);
+  }
+
+  return [
+    photo,
+    el('div', 'setting-heading', 'Name'),
+    names,
+    el('div', 'setting-heading', 'About'),
+    about,
+    actions,
+    settingRow(
+      'Username',
+      signalProfile.username
+        ? 'Change or remove it in Signal on your phone.'
+        : 'Set one in Signal on your phone.',
+      el('span', 'setting-value', signalProfile.username ?? 'None')
+    ),
+    el(
+      'p',
+      'setting-note',
+      'Your profile is visible to the people and groups you message, and to anyone you accept a message request from.'
+    ),
+  ];
+}
+
+function blockedRows(blocked) {
+  if (blocked.length === 0) {
+    return [el('p', 'setting-note', 'Nobody is blocked.')];
+  }
+  const dateFormat = new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const groups = [
+    ['Contacts', blocked.filter(b => b.type === 'direct')],
+    ['Groups', blocked.filter(b => b.type === 'group')],
+  ];
+  return groups
+    .filter(([, list]) => list.length > 0)
+    .flatMap(([heading, list]) => [
+      el('div', 'setting-heading', heading),
+      ...list.map(b => {
+        const row = el('div', 'blocked-row');
+        const text = el('div', 'setting-text');
+        text.append(el('div', 'setting-label', b.title));
+        if (b.blockedAt) {
+          text.append(
+            el(
+              'div',
+              'setting-desc',
+              `Blocked on ${dateFormat.format(new Date(b.blockedAt))}`
+            )
+          );
+        }
+        row.append(avatar(b.conversationId, b, 36, b.type), text);
+        return row;
+      }),
+    ]);
 }
 
 async function changeSetting(key, value) {
@@ -1853,30 +2162,53 @@ function skinTonePicker(value, onPick) {
   return row;
 }
 
+function storiesButton(enabled, onChange) {
+  const b = el(
+    'button',
+    `setting-button${enabled ? ' danger' : ''}`,
+    enabled ? 'Turn off stories' : 'Turn on stories'
+  );
+  b.type = 'button';
+  b.addEventListener('click', () => {
+    if (
+      enabled &&
+      !confirm(
+        'You will no longer be able to share or view stories. Story updates you have recently shared will also be deleted.'
+      )
+    ) {
+      return;
+    }
+    onChange(!enabled);
+  });
+  return b;
+}
+
 function settingsSections() {
   const s = signalSettings;
   const set = (key, value) => changeSetting(key, value);
-  const sections = [
-    {
-      id: 'appearance',
-      title: 'Appearance',
-      rows: () => [
-        settingRow(
-          'Theme',
-          'For this page. Signal on your phone keeps its own.',
-          settingSelect(
-            pageTheme(),
-            [
-              ['system', 'System'],
-              ['light', 'Light'],
-              ['dark', 'Dark'],
-            ],
-            setPageTheme
-          )
-        ),
-      ],
-    },
-  ];
+  const sections = [];
+  if (signalProfile) {
+    sections.push({ id: 'profile', title: 'Profile', rows: profileRows });
+  }
+  sections.push({
+    id: 'appearance',
+    title: 'Appearance',
+    rows: () => [
+      settingRow(
+        'Theme',
+        'For this page. Signal on your phone keeps its own.',
+        settingSelect(
+          pageTheme(),
+          [
+            ['system', 'System'],
+            ['light', 'Light'],
+            ['dark', 'Dark'],
+          ],
+          setPageTheme
+        )
+      ),
+    ],
+  });
   if (!s) {
     return sections;
   }
@@ -2012,6 +2344,25 @@ function settingsSections() {
             set('sealedSenderIndicators', v)
           )
         ),
+        settingRow(
+          'Stories',
+          s.storiesEnabled
+            ? 'Turning stories off deletes the stories you shared, and you will no longer share or view them. Applies to all your devices.'
+            : 'Stories are off. Applies to all your devices.',
+          storiesButton(s.storiesEnabled, v => set('storiesEnabled', v))
+        ),
+      ],
+    },
+    {
+      id: 'blocked',
+      title: 'Blocked',
+      rows: () => [
+        el(
+          'p',
+          'setting-note',
+          "Blocked people and groups can't message or call you. Unblock one from its chat."
+        ),
+        ...blockedRows(s.blocked ?? []),
       ],
     },
     {
@@ -2098,7 +2449,7 @@ async function openSettings() {
   closePopovers();
   $('settings').hidden = false;
   renderSettings();
-  await loadSettings();
+  await Promise.all([loadSettings(), loadProfile()]);
   renderSettings();
 }
 

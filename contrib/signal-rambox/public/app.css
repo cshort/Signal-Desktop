@@ -211,6 +211,17 @@ button {
   font-size: 14px;
 }
 
+.av-80 {
+  width: 80px;
+  height: 80px;
+  font-size: 30px;
+}
+
+.av-80 .icon {
+  width: 40px;
+  height: 40px;
+}
+
 .av-28 {
   width: 28px;
   height: 28px;
@@ -2450,6 +2461,113 @@ label.poll-option {
 .setting-select:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* Signal's profile editor and blocked list. */
+.profile-photo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 0 8px;
+}
+
+.profile-photo-buttons,
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-actions {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-fields .setting-input {
+  flex: 1 1 180px;
+}
+
+.setting-input {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.setting-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.profile-emoji {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  font-size: 20px;
+}
+
+.setting-button {
+  flex: none;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.setting-button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.setting-button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.setting-button.danger {
+  color: #d92d20;
+}
+
+.setting-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.setting-value {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.blocked-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* The about-emoji picker opens over the Settings dialog. */
+#emoji-picker {
+  z-index: 32;
 }
 
 @media (max-width: 600px) {

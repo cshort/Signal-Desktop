@@ -452,9 +452,38 @@ The page has a Settings dialog with Signal's sections, plus Appearance
 button in the emoji picker. Unlinking devices, deleting data, changing
 number and backups stay in Signal, so a browser tab can't lock Mike out.
 Desktop-window settings (launch at login, tray, zoom, spell check) don't
-apply to a computer without a screen and are left out. Stories on/off is
-left out for now: Signal's own switch deletes your stories in a way that
-needs its confirmation dialog.
+apply to a computer without a screen and are left out. Stories on/off came
+later, in F12.
 
 WHY: Mike needed the emoji skin tone and asked for the whole Settings menu
 (2026-10-12 09:44 PT).
+
+## F12. Fork only: profile, blocked list and stories on/off
+
+DECISION: Under the same `settings.manage` capability (no new approval):
+
+- `profile.get` returns our name, about (text and emoji), username and
+  photo version (our own conversation, Note to Self, carries the photo).
+- `profile.set {firstName, familyName, aboutText, aboutEmoji}` saves
+  through writeProfile, as Signal's profile editor does, with its limits:
+  a required first name, names up to 26 characters (128 bytes), about up
+  to 140 characters (512 bytes), and the emoji must be one Signal knows.
+- `profile.setAvatar {data}` takes an image (base64, up to 600 KB) and
+  Signal re-encodes it as a centered square JPEG of at most 512 px, as its
+  avatar editor does; `null` removes the photo. The page crops and shrinks
+  the picture in the browser first and posts the bytes to
+  `api/profilePhoto`.
+- The username is shown, not changed: Signal's username flow reserves and
+  confirms with its server and belongs in Signal itself.
+- `settings.get` adds `blocked` (people, then groups, as Signal's Privacy >
+  Blocked page builds it, with the date when Signal has one) and
+  `storiesEnabled`. The blocked list is read-only, as in Signal; a chat is
+  unblocked from the chat.
+- `settings.set {key: 'storiesEnabled'}` turns stories on or off. Turning
+  them off deletes the stories we shared first, as Signal's confirmation
+  says, and the page asks with the same words. (Signal Desktop's own code
+  calls deleteAllMyStories when turning stories back on, which looks
+  inverted; the fork follows the dialog's promise.)
+
+WHY: The promised second round of Mike's "replicate the entire Settings
+menu" (2026-10-12).

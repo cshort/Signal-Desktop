@@ -20,6 +20,8 @@ import { createServer } from 'node:http';
 import { join } from 'node:path';
 
 const MAX_BODY_BYTES = 128 * 1024;
+// Signal's limit for a new profile photo (profile.setAvatar).
+const MAX_PROFILE_PHOTO_BYTES = 600 * 1024;
 const MAX_EVENT_STREAMS = 8;
 // Signal answers at most 16 requests at once per app; leave room for the
 // page's own calls while a chat list full of photos loads.
@@ -132,7 +134,8 @@ export function checkRequest(req, { origins, token }) {
   }
   if (req.method === 'POST') {
     const type = (req.headers['content-type'] ?? '').split(';')[0].trim();
-    const upload = path.endsWith('/api/upload');
+    const upload =
+      path.endsWith('/api/upload') || path.endsWith('/api/profilePhoto');
     if (type !== (upload ? 'application/octet-stream' : 'application/json')) {
       return [415, 'wrong content type'];
     }
@@ -149,6 +152,20 @@ function send(res, status, type, body) {
 
 function sendJson(res, status, value) {
   send(res, status, 'application/json; charset=utf-8', JSON.stringify(value));
+}
+
+// Null when the body is over `max`; the rest is drained, so the answer
+// still reaches the page.
+async function readBytes(req, max) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size <= max) {
+      chunks.push(chunk);
+    }
+  }
+  return size > max ? null : Buffer.concat(chunks);
 }
 
 function readJson(req) {
@@ -507,6 +524,35 @@ export function createWebServer({
         // The catalog comes in the default skin tone.
         emojiCatalog = null;
       }
+      sendJson(res, 200, result);
+      return;
+    }
+    if (req.method === 'GET' && route === 'api/profile') {
+      sendJson(res, 200, await bridge.call('profile.get', {}));
+      return;
+    }
+    if (req.method === 'POST' && route === 'api/profile') {
+      const { firstName, familyName, aboutText, aboutEmoji } =
+        await readJson(req);
+      const result = await bridge.call('profile.set', {
+        firstName,
+        familyName,
+        aboutText,
+        aboutEmoji,
+      });
+      sendJson(res, 200, result);
+      return;
+    }
+    if (req.method === 'POST' && route === 'api/profilePhoto') {
+      // An empty body removes the photo.
+      const bytes = await readBytes(req, MAX_PROFILE_PHOTO_BYTES);
+      if (!bytes) {
+        sendJson(res, 413, { error: { code: 'INVALID_ARGUMENT' } });
+        return;
+      }
+      const result = await bridge.call('profile.setAvatar', {
+        data: bytes.length > 0 ? bytes.toString('base64') : null,
+      });
       sendJson(res, 200, result);
       return;
     }

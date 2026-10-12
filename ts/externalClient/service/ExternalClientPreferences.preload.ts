@@ -8,17 +8,24 @@ import {
   DEFAULT_AUTO_DOWNLOAD_ATTACHMENT,
   itemStorage,
 } from '../../textsecure/Storage.preload.ts';
-import { setPhoneNumberDiscoverability } from '../../textsecure/WebAPI.preload.ts';
+import {
+  onHasStoriesDisabledChange,
+  setPhoneNumberDiscoverability,
+} from '../../textsecure/WebAPI.preload.ts';
 import { PhoneNumberSharingMode } from '../../types/PhoneNumberSharingMode.std.ts';
+import { SIGNAL_ACI } from '../../types/SignalConversation.std.ts';
 import type { StorageAccessType } from '../../types/StorageKeys.std.ts';
 import { STORAGE_KEY_DEFAULTS } from '../../types/StorageKeys.std.ts';
 import * as Errors from '../../types/errors.std.ts';
+import { deleteAllMyStories } from '../../util/deleteAllMyStories.preload.ts';
 import { DurationInSeconds } from '../../util/durations/duration-in-seconds.std.ts';
 import { getConversation } from '../../util/getConversation.preload.ts';
 import { PhoneNumberDiscoverability } from '../../util/phoneNumberDiscoverability.std.ts';
 import * as universalExpireTimer from '../../util/universalExpireTimer.preload.ts';
+import { getAvatarVersion } from '../conversationDto.std.ts';
 import type { ServiceResultType } from '../hostTypes.std.ts';
 import type {
+  BlockedDTO,
   SettingsDTO,
   SettingsGetResultType,
   SettingsSetParamsType,
@@ -50,6 +57,44 @@ function put<K extends keyof StorageAccessType>(
       key
     );
   }
+}
+
+// As Signal's Settings > Privacy > Blocked (smart/Preferences): people by
+// service id, then by number, then Signal's own chat; then groups.
+function readBlocked(): Array<BlockedDTO> {
+  const found = new Map<string, BlockedDTO>();
+  const add = (
+    lookup: string,
+    blockedAt: number | undefined,
+    type: BlockedDTO['type']
+  ) => {
+    const model = window.ConversationController.get(lookup);
+    if (!model || found.has(model.id)) {
+      return;
+    }
+    const conversation = getConversation(model);
+    found.set(model.id, {
+      conversationId: model.id,
+      type,
+      title: conversation.title,
+      blockedAt: blockedAt != null && blockedAt > 0 ? blockedAt : null,
+      avatarColor: conversation.color ?? null,
+      avatarVersion: getAvatarVersion(conversation),
+    });
+  };
+  for (const entry of itemStorage.get('blocked-uuids') ?? []) {
+    add(entry.serviceId, entry.blockedAt, 'direct');
+  }
+  for (const entry of itemStorage.get('blocked') ?? []) {
+    add(entry.e164, entry.blockedAt, 'direct');
+  }
+  if (itemStorage.get('releaseNotesChatBlocked')) {
+    add(SIGNAL_ACI, itemStorage.get('releaseNotesChatBlockedAt'), 'direct');
+  }
+  for (const entry of itemStorage.get('blocked-groups') ?? []) {
+    add(entry.groupId, entry.blockedAt, 'group');
+  }
+  return [...found.values()];
 }
 
 function readSettings(): SettingsDTO {
@@ -90,6 +135,8 @@ function readSettings(): SettingsDTO {
       ...DEFAULT_AUTO_DOWNLOAD_ATTACHMENT,
       ...item('auto-download-attachment', DEFAULT_AUTO_DOWNLOAD_ATTACHMENT),
     },
+    storiesEnabled: !item('hasStoriesDisabled', false),
+    blocked: readBlocked(),
   };
 }
 
@@ -185,6 +232,15 @@ async function applySetting(params: SettingsSetParamsType): Promise<void> {
       return;
     case 'autoDownload':
       put('auto-download-attachment', params.value, { sync: false });
+      return;
+    case 'storiesEnabled':
+      // Signal's confirmation: turning stories off deletes the ones we
+      // shared. Done first, while Signal still holds them.
+      if (!params.value) {
+        await deleteAllMyStories();
+      }
+      put('hasStoriesDisabled', !params.value, { sync: true });
+      onHasStoriesDisabledChange(!params.value);
       return;
     default:
       throw new InvalidSetting();

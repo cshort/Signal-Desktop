@@ -8,7 +8,7 @@ Signal Desktop keeps running, minimized to the tray, and stays the real
 client: it holds the keys, sends and receives. This helper is an approved
 companion app. It shows your chats with their photos, lets you read and send
 text messages, reply with a quote, send stickers from your installed packs, change Signal's settings (the
-gear by the search box: chats, notifications, privacy, data usage, plus a
+gear by the search box: your profile name, about and photo, chats, notifications, privacy, stories, the blocked list, data usage, plus a
 light/dark theme for the page; account-wide ones apply on all your
 devices), react with your quick-reaction bar (click a reaction to see who sent
 it) and @mention people in groups (type @ and pick from the
@@ -48,8 +48,8 @@ Photos, member labels, reactions and replies use fork-only bridge additions
 `messages.edit`, `messages.delete`, `attachments.uploadBegin`,
 `attachments.uploadChunk`, `messages.forward`, `emoji.getCatalog`, `polls.vote`, `polls.end`,
 `polls.send`, `conversations.getMembers`, mentions, formatting, `stickers.getPacks`, `stickers.getImage`,
-`messages.sendSticker`, `settings.get`, `settings.set` (capability
-`settings.manage`) and
+`messages.sendSticker`, `settings.get`, `settings.set`, `profile.get`,
+`profile.set`, `profile.setAvatar` (capability `settings.manage`) and
 `attachmentUploadIds` on
 `messages.sendText`, and pin order, formatting and link previews on the
 DTOs),
