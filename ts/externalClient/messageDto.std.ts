@@ -5,6 +5,7 @@ import { ReadStatus } from '../messages/MessageReadStatus.std.ts';
 import type { MessageAttributesType } from '../model-types.d.ts';
 import { BodyRange } from '../types/BodyRange.std.ts';
 import type { AttachmentType } from '../types/Attachment.std.ts';
+import { isDownloaded } from '../util/Attachment.std.ts';
 import type { MessagePollVoteType } from '../types/Polls.dom.ts';
 import {
   isGIF,
@@ -380,7 +381,12 @@ export function toMessageDTO(
     sentAt: message.sent_at,
     receivedAt: message.received_at_ms ?? null,
     body: hidden ? null : (message.body ?? null),
-    bodyTruncated: !hidden && message.bodyAttachment != null,
+    // A long message's body holds all of it once its text has arrived, and
+    // always for the user's own messages.
+    bodyTruncated:
+      !hidden &&
+      message.bodyAttachment != null &&
+      !isDownloaded(message.bodyAttachment),
     mentions: hidden ? [] : toMentions(message, context),
     attachments: hidden ? [] : toAttachments(message),
     sticker: hidden ? null : toSticker(message),

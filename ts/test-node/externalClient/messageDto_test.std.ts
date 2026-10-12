@@ -292,6 +292,20 @@ describe('externalClient/messageDto', () => {
         context
       )?.bodyTruncated
     );
+    // Downloaded (or sent from here): the body is the whole text.
+    assert.isFalse(
+      toMessageDTO(
+        {
+          ...incoming,
+          bodyAttachment: {
+            contentType: IMAGE_PNG,
+            size: 5000,
+            path: 'ab/abcdef',
+          },
+        },
+        context
+      )?.bodyTruncated
+    );
     assert.isTrue(
       toMessageDTO(
         {
