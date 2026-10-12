@@ -399,3 +399,17 @@ WHY: Mike asked for Bold, Italic, Strikethrough and Spoiler on right-click
 (2026-10-11 22:14 PT); Monospace, the bar and the shortcuts make it match
 Signal's own composer. Styles sent as body ranges render for every
 recipient, which Markdown-ish text would not.
+
+## F9. Fork only: delivery status in the chat list
+
+DECISION: `lastMessage.status` on conversations carries Signal's own
+status for the user's last message (the same values as a message's
+`sendStatus`; null for someone else's message). The page shows Signal's
+icons (images/icons/v3/message_status, served by the helper) at the end of
+the preview line and in each outgoing bubble in place of the words: one
+circled check sent, two delivered, two filled read or viewed, a spinner
+while sending, a red "!" when not sent (bubbles keep the words for
+problems). The words stay as each icon's tooltip.
+
+WHY: Mike wants to see from the list who has read a message, as Signal
+shows it (2026-10-11 22:37 PT), after forwarding to 28 chats.

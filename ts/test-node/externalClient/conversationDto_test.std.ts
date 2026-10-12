@@ -81,7 +81,19 @@ describe('externalClient/conversationDto', () => {
       text: 'hi @Alice!',
       author: 'Bob',
       deleted: false,
+      status: null,
     });
+  });
+
+  it("gives the user's own last message its delivery status", () => {
+    const withStatus = (status: 'error' | 'delivered' | 'read') =>
+      toConversationDTO({
+        ...base,
+        lastMessage: { deletedForEveryone: false, text: 'hi', status },
+      }).lastMessage?.status;
+    assert.strictEqual(withStatus('delivered'), 'delivered');
+    assert.strictEqual(withStatus('read'), 'read');
+    assert.strictEqual(withStatus('error'), 'failed');
   });
 
   it('gives an opaque avatar version that follows the photo', () => {

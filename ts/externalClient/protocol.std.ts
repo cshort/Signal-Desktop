@@ -859,6 +859,9 @@ export type LastMessageDTO = Readonly<{
   // Groups: who wrote it ("You" for the user), as Signal shows it.
   author: string | null;
   deleted: boolean;
+  // Fork addition: when the last message is the user's own, how far it got
+  // (Signal's checkmarks in the chat list); null otherwise.
+  status: MessageSendStatusType | null;
 }>;
 
 export type ConversationsListResultType = Readonly<{

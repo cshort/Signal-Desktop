@@ -3,7 +3,11 @@
 
 import type { ConversationType } from '../state/ducks/conversations.preload.ts';
 import { isConversationMuted } from '../util/isConversationMuted.std.ts';
-import type { ConversationDTO, LastMessageDTO } from './protocol.std.ts';
+import type {
+  ConversationDTO,
+  LastMessageDTO,
+  MessageSendStatusType,
+} from './protocol.std.ts';
 
 // Maps Signal's conversation view model to the public DTO. Fields are copied
 // one by one on purpose: a new internal field must never reach clients just
@@ -65,7 +69,7 @@ function toLastMessage(
     return null;
   }
   if (lastMessage.deletedForEveryone) {
-    return { text: null, author: null, deleted: true };
+    return { text: null, author: null, deleted: true, status: null };
   }
   let { text } = lastMessage;
   const mentions = [...(lastMessage.bodyRanges ?? [])]
@@ -83,8 +87,23 @@ function toLastMessage(
     text: lastMessage.prefix ? `${lastMessage.prefix} ${text}` : text,
     author: lastMessage.author ?? null,
     deleted: false,
+    status: lastMessage.status
+      ? (LAST_MESSAGE_STATUS[lastMessage.status] ?? null)
+      : null,
   };
 }
+
+// Signal sets a status only on the user's own last message.
+const LAST_MESSAGE_STATUS: Record<string, MessageSendStatusType> = {
+  paused: 'paused',
+  error: 'failed',
+  'partial-sent': 'partiallySent',
+  sending: 'sending',
+  sent: 'sent',
+  delivered: 'delivered',
+  read: 'read',
+  viewed: 'viewed',
+};
 
 // Same rule as the left pane (_getLeftPaneLists): a conversation is listed
 // when it is pinned or has had activity.

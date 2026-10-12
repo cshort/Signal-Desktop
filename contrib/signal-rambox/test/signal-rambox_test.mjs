@@ -237,6 +237,17 @@ describe('signal-rambox', () => {
     assert.equal(res.headers['x-content-type-options'], 'nosniff');
   });
 
+  it("serves Signal's message status icons", async () => {
+    for (const name of ['sending', 'sent', 'delivered', 'read', 'failed']) {
+      // oxlint-disable-next-line no-await-in-loop
+      const res = await http(port, {
+        path: `/${helper.token}/status/${name}.svg`,
+      });
+      assert.equal(res.status, 200);
+      assert.equal(res.headers['content-type'], 'image/svg+xml');
+    }
+  });
+
   it('redirects /<token> to /<token>/', async () => {
     const res = await http(port, { path: `/${helper.token}` });
     assert.equal(res.status, 308);

@@ -72,6 +72,13 @@ const STATIC_FILES = {
   'app.js': ['app.js', 'text/javascript; charset=utf-8'],
   'app.css': ['app.css', 'text/css; charset=utf-8'],
   'icon.svg': ['icon.svg', 'image/svg+xml'],
+  // Signal's own message status icons (images/icons/v3).
+  ...Object.fromEntries(
+    ['sending', 'sent', 'delivered', 'read', 'failed'].map(name => [
+      `status/${name}.svg`,
+      [`status/${name}.svg`, 'image/svg+xml'],
+    ])
+  ),
 };
 
 const SECURITY_HEADERS = {

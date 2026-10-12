@@ -390,7 +390,12 @@ function conversationRow(c) {
     el('span', 'title', displayTitle(c)),
     el('span', 'time', shortTime(c.lastActivityAt))
   );
-  text.append(top, el('span', 'preview', previewLine(c)));
+  const bottom = el('span', 'row-bottom');
+  bottom.append(el('span', 'preview', previewLine(c)));
+  if (c.lastMessage?.status) {
+    bottom.append(statusIcon(c.lastMessage.status));
+  }
+  text.append(top, bottom);
   li.append(conversationAvatar(c, 48), text);
   if (unread) {
     li.append(
@@ -400,6 +405,16 @@ function conversationRow(c) {
   li.addEventListener('click', () => selectConversation(c.id));
   rowCache.set(c.id, { key, li });
   return li;
+}
+
+// Signal's checkmarks: one circle sent, two delivered, two filled read.
+function statusIcon(status) {
+  const label = STATUS_TEXT[status] ?? status;
+  const span = el('span', `status-icon st-${status}`);
+  span.title = label;
+  span.setAttribute('role', 'img');
+  span.setAttribute('aria-label', label);
+  return span;
 }
 
 // The second line of a chat list row, as Signal writes it.
@@ -1185,10 +1200,14 @@ function renderMessage(m, prev, next) {
   if (m.edited) {
     bits.push('Edited');
   }
-  if (m.sendStatus) {
-    bits.push(STATUS_TEXT[m.sendStatus] ?? m.sendStatus);
+  // Problems keep their words too; the checkmarks speak for themselves.
+  if (['failed', 'partiallySent', 'paused'].includes(m.sendStatus)) {
+    bits.push(STATUS_TEXT[m.sendStatus]);
   }
   meta.textContent = bits.join(' · ');
+  if (m.sendStatus) {
+    meta.append(statusIcon(m.sendStatus));
+  }
   bubble.append(meta);
 
   const line = el('span', 'bubble-line');
