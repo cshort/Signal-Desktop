@@ -54,6 +54,8 @@ const BANNERS = {
 };
 
 const SEND_ERRORS = {
+  proxyTooLarge:
+    'Not sent: the web server in front of the helper refused a file this big (HTTP 413). Raise its upload limit (nginx: client_max_body_size).',
   expired: 'This version of Signal has expired. Update Signal.',
   invalidConversation: "Signal can't send to this chat.",
   blocked: 'You blocked this chat. Unblock it in Signal to send.',
@@ -2874,6 +2876,12 @@ async function uploadFile(file) {
     body: file,
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 413) {
+    // From a reverse proxy in front of the helper, not from Signal.
+    const error = new Error('HTTP 413');
+    error.reason = 'proxyTooLarge';
+    throw error;
+  }
   if (!res.ok) {
     const error = new Error(data.error?.message ?? `HTTP ${res.status}`);
     error.code = data.error?.code;

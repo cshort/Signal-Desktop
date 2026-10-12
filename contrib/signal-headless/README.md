@@ -25,7 +25,9 @@ dir`) and a slim runtime image with Xvfb. Signal runs with
 - `screen.sh`: screenshots, clicks and VNC for the one-time setup.
 - `compose.yml`: publishes the chat page and VNC on the host's 127.0.0.1
   only. Put a reverse proxy with HTTPS in front of 8083 and set
-  `RAMBOX_ORIGIN` to its address.
+  `RAMBOX_ORIGIN` to its address. Let the proxy pass large uploads, or
+  photos over its default limit fail with HTTP 413 (nginx's default is
+  1 MB): in nginx, `client_max_body_size 100m;` in that server block.
 
 ## First run
 
