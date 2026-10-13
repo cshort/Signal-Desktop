@@ -121,6 +121,15 @@ export class FakeBridge {
           author: quoted.author,
           sentAt: quoted.sentAt,
           text: quoted.body,
+          attachment: quoted.attachments[0]
+            ? {
+                contentType: quoted.attachments[0].contentType,
+                fileName: quoted.attachments[0].fileName ?? null,
+                isVoiceMessage: quoted.attachments[0].isVoiceMessage ?? false,
+                isGif: quoted.attachments[0].contentType === 'image/gif',
+                hasThumbnail: quoted.attachments[0].hasThumbnail ?? false,
+              }
+            : null,
         };
       }
     }

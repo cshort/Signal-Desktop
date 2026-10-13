@@ -1368,6 +1368,37 @@ function flashMessage(messageId) {
   return true;
 }
 
+// As Signal's quote names an attachment it has no text for.
+function quoteLabel(a) {
+  const type = a.contentType.split('/')[0];
+  if (type === 'audio') {
+    return a.isVoiceMessage ? 'Voice message' : 'Audio';
+  }
+  if (type === 'image') {
+    return a.isGif ? 'GIF' : 'Photo';
+  }
+  if (type === 'video') {
+    return 'Video';
+  }
+  return a.fileName ?? 'File';
+}
+
+const QUOTE_THUMB_PX = 48;
+
+// The small square picture on the right of a quote, like Signal's.
+function addQuoteThumb(box, src) {
+  const img = el('img', 'quote-thumb');
+  img.alt = '';
+  img.loading = 'lazy';
+  img.src = src;
+  img.addEventListener('error', () => {
+    img.remove();
+    box.classList.remove('has-thumb');
+  });
+  box.classList.add('has-thumb');
+  box.append(img);
+}
+
 function renderQuote(quote, m) {
   const box = el('span', 'quote');
   const link = m ? privateLinks.byReply.get(m.id) : undefined;
@@ -1393,10 +1424,25 @@ function renderQuote(quote, m) {
   if (author?.nameColor) {
     box.classList.add(`nc-${author.nameColor}`);
   }
+  const a = quote.attachment;
   box.append(
     nameLine(nameOf(quote.authorConversationId), author, 'quote-author'),
-    el('span', 'quote-text', quote.text ?? 'Attachment')
+    el(
+      'span',
+      'quote-text',
+      quote.text || (a ? quoteLabel(a) : null) || 'Attachment'
+    )
   );
+  if (a?.hasThumbnail && m) {
+    addQuoteThumb(
+      box,
+      `api/thumbnail?${new URLSearchParams({
+        messageId: m.id,
+        quote: '1',
+        width: String(previewWidth(QUOTE_THUMB_PX)),
+      })}`
+    );
+  }
   if (link) {
     const group = conversations.get(link.groupConversationId);
     box.append(
@@ -4762,11 +4808,25 @@ function startReply(m) {
       m.direction === 'outgoing' ? null : m.author,
       'quote-author'
     ),
-    el('span', 'quote-text', summarize(m))
+    el(
+      'span',
+      'quote-text',
+      m.kind === 'text' && !m.body && m.attachments[0]
+        ? quoteLabel(m.attachments[0])
+        : summarize(m)
+    )
   );
   quote.className = 'reply-quote';
   if (m.direction !== 'outgoing' && m.author?.nameColor) {
     quote.classList.add(`nc-${m.author.nameColor}`);
+  }
+  if (m.kind === 'text' && m.attachments[0]?.hasThumbnail) {
+    addQuoteThumb(
+      quote,
+      `api/thumbnail?${attachmentParams(m, 0, {
+        width: String(previewWidth(QUOTE_THUMB_PX)),
+      })}`
+    );
   }
   $('reply-bar').hidden = false;
   focusCompose();

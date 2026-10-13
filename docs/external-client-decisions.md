@@ -748,3 +748,16 @@ that ran on Six, not main. Six itself keeps building from this fork's main.
 
 WHY: Mike asked how people would find a folder inside a Signal fork
 (2026-10-13 12:28 PT) and deferred to judgement on a new repo.
+
+## F25. Fork only: quoted attachments and their thumbnails
+
+DECISION: `QuoteDTO.attachment` describes the quoted message's first
+attachment the way Signal's quote does (content type, file name, voice
+message, GIF, and whether a thumbnail exists), never for view-once.
+`attachments.getThumbnail` with `quote: true` renders the quote's own
+thumbnail, the small image Signal stores with the reply, so it works even
+when the original isn't loaded. The page shows "Photo", "Video", "GIF",
+"Voice message", "Audio" or the file name, with the thumbnail on the
+right, in bubbles and in the reply bar.
+
+WHY: Mike asked (2026-10-13 12:47 PT); quotes of photos read "Attachment".

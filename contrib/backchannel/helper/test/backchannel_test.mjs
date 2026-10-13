@@ -524,6 +524,17 @@ describe('backchannel helper', () => {
     assert.deepEqual(call.params, { messageId: 'm1', preview: 0 });
   });
 
+  it("asks for a quote's thumbnail by the replying message", async () => {
+    const thumb = await http(port, {
+      path: `/${helper.token}/api/thumbnail?messageId=m1&quote=1&width=160`,
+    });
+    assert.equal(thumb.status, 200);
+    const call = bridge.calls.findLast(
+      c => c.method === 'attachments.getThumbnail'
+    );
+    assert.deepEqual(call.params, { messageId: 'm1', quote: true, width: 160 });
+  });
+
   it('asks for previews as wide as the page draws them, within limits', async () => {
     for (const [asked, sent] of [
       ['480', 480],

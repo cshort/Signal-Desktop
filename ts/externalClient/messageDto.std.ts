@@ -19,6 +19,7 @@ import type {
   MessageDTO,
   MessageKindType,
   MessageSendStatusType,
+  QuoteAttachmentDTO,
   QuoteDTO,
   ReactionDTO,
   StickerDTO,
@@ -327,6 +328,28 @@ function toQuote(
     sentAt: quote.id,
     // A quote of a view-once message must not reveal it.
     text: quote.isViewOnce ? null : (quote.text ?? null),
+    attachment: quote.isViewOnce ? null : toQuoteAttachment(quote),
+  };
+}
+
+// As Signal's Quote component labels it: Photo, GIF, Video, Voice message,
+// Audio, or the file name, with the quote's own small thumbnail.
+function toQuoteAttachment(
+  quote: NonNullable<MessageSourceType['quote']>
+): QuoteAttachmentDTO | null {
+  const first = quote.attachments?.[0];
+  if (!first) {
+    return null;
+  }
+  return {
+    contentType: first.contentType,
+    fileName: first.fileName ?? null,
+    isVoiceMessage: isVoiceMessage({
+      contentType: first.contentType,
+      fileName: first.fileName,
+    }),
+    isGif: first.contentType === 'image/gif',
+    hasThumbnail: Boolean(first.thumbnail?.path),
   };
 }
 

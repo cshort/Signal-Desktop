@@ -262,7 +262,61 @@ describe('externalClient/messageDto', () => {
       },
       sentAt: 42,
       text: 'earlier',
+      attachment: null,
     });
+  });
+
+  it("describes a quoted attachment and its thumbnail, as Signal's quote does", () => {
+    const withQuote = (
+      attachments: ReadonlyArray<{
+        contentType: typeof IMAGE_PNG;
+        fileName?: string;
+        thumbnail?: {
+          contentType: typeof IMAGE_PNG;
+          size: number;
+          path?: string;
+        };
+      }>,
+      isViewOnce = false
+    ) =>
+      toMessageDTO(
+        {
+          ...incoming,
+          quote: {
+            id: 7,
+            text: undefined,
+            attachments,
+            isViewOnce,
+            referencedMessageNotFound: false,
+          },
+        },
+        context
+      )?.quote;
+    const quote = withQuote([
+      {
+        contentType: IMAGE_PNG,
+        fileName: 'cat.png',
+        thumbnail: { contentType: IMAGE_PNG, size: 10, path: 'secret/thumb' },
+      },
+    ]);
+    assert.deepEqual(quote?.attachment, {
+      contentType: IMAGE_PNG,
+      fileName: 'cat.png',
+      isVoiceMessage: false,
+      isGif: false,
+      hasThumbnail: true,
+    });
+    assert.notInclude(JSON.stringify(quote), 'secret');
+    assert.isFalse(
+      withQuote([
+        {
+          contentType: IMAGE_PNG,
+          thumbnail: { contentType: IMAGE_PNG, size: 1 },
+        },
+      ])?.attachment?.hasThumbnail
+    );
+    assert.isNull(withQuote([{ contentType: IMAGE_PNG }], true)?.attachment);
+    assert.isNull(withQuote([])?.attachment);
   });
 
   it('hides the text of a quoted view-once message', () => {

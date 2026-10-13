@@ -286,6 +286,9 @@ export function createWebServer({
     if (url.searchParams.get('sticker') === '1') {
       return { messageId, sticker: true };
     }
+    if (url.searchParams.get('quote') === '1') {
+      return { messageId, quote: true };
+    }
     if (url.searchParams.has('preview')) {
       return { messageId, preview: Number(url.searchParams.get('preview')) };
     }

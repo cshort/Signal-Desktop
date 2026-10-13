@@ -653,6 +653,8 @@ const attachmentTargetShape = {
   sticker: z.literal(true).optional(),
   // A link preview's image, by its position in `previews`.
   preview: z.number().int().min(0).max(15).optional(),
+  // The thumbnail in the message's quote (quote.attachment.hasThumbnail).
+  quote: z.literal(true).optional(),
 };
 
 export const attachmentsGetThumbnailParamsSchema = z
@@ -1585,6 +1587,18 @@ export type QuoteDTO = Readonly<{
   author: AuthorDTO | null;
   sentAt: number | null;
   text: string | null;
+  // Fork addition: the quoted message's first attachment, as Signal shows
+  // it in the quote (a thumbnail, or the kind of file).
+  attachment: QuoteAttachmentDTO | null;
+}>;
+
+export type QuoteAttachmentDTO = Readonly<{
+  contentType: string;
+  fileName: string | null;
+  isVoiceMessage: boolean;
+  isGif: boolean;
+  // attachments.getThumbnail with `quote: true` returns it.
+  hasThumbnail: boolean;
 }>;
 
 export type ReactionDTO = Readonly<{
