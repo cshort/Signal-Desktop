@@ -2,7 +2,8 @@
 
 Use Signal inside [Rambox](https://rambox.app) (or any app that hosts web
 pages) through Signal Desktop's local API for companion apps (the external
-client bridge, signalapp/Signal-Desktop#8054).
+client bridge, proposed upstream as signalapp/Signal-Desktop#8054 and
+declined there, so it lives in this fork).
 
 Signal Desktop keeps running, minimized to the tray, and stays the real
 client: it holds the keys, sends and receives. This helper is an approved

@@ -15,6 +15,11 @@
 > - Run it next to Signal on your own PC: [contrib/signal-rambox](contrib/signal-rambox)
 > - Security design: [docs/external-client-threat-model.md](docs/external-client-threat-model.md)
 >
+> Signal declined to add the API upstream
+> ([signalapp/Signal-Desktop#8054](https://github.com/signalapp/Signal-Desktop/pull/8054),
+> closed October 2026), so this stays a maintained fork that merges every
+> Signal release.
+>
 > Not affiliated with Signal. Everything below is Signal's own README.
 
 Signal Desktop links with Signal on [Android](https://github.com/signalapp/Signal-Android) or [iOS](https://github.com/signalapp/Signal-iOS) and lets you message from your Windows, macOS, and Linux computers.
