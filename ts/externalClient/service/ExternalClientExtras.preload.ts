@@ -106,15 +106,28 @@ type RenderedImageType = Readonly<{
 // Base64 of the result must fit in a frame with room to spare.
 const MAX_RENDERED_BASE64 = 900 * 1024;
 
+type RenderSizeType = Readonly<
+  { square: number } | { fit: number } | { width: number }
+>;
+
 export async function renderImage(
   url: string,
-  size: Readonly<{ square: number } | { fit: number } | { width: number }>
+  size: RenderSizeType
 ): Promise<RenderedImageType | undefined> {
   const response = await fetch(url);
   if (!response.ok) {
     return undefined;
   }
-  const bitmap = await createImageBitmap(await response.blob());
+  return renderImageBlob(await response.blob(), size);
+}
+
+// The same from bytes in memory (Signal's CSP doesn't let it fetch blob:
+// URLs).
+export async function renderImageBlob(
+  source: Blob,
+  size: RenderSizeType
+): Promise<RenderedImageType | undefined> {
+  const bitmap = await createImageBitmap(source);
   try {
     const { width, height } = bitmap;
     if (width === 0 || height === 0) {

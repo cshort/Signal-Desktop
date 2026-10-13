@@ -17,7 +17,7 @@ import type {
   LinkPreviewsFetchParamsType,
   LinkPreviewsFetchResultType,
 } from '../protocol.std.ts';
-import { renderImage } from './ExternalClientExtras.preload.ts';
+import { renderImageBlob } from './ExternalClientExtras.preload.ts';
 
 const log = createLogger('ExternalClientLinkPreviews');
 
@@ -81,16 +81,16 @@ async function toPreviewImage(
   if (!image?.data) {
     return null;
   }
-  const objectUrl = URL.createObjectURL(
-    new Blob([image.data], { type: image.contentType })
-  );
   try {
-    return (await renderImage(objectUrl, { fit: PREVIEW_IMAGE_PX })) ?? null;
+    return (
+      (await renderImageBlob(
+        new Blob([image.data], { type: image.contentType }),
+        { fit: PREVIEW_IMAGE_PX }
+      )) ?? null
+    );
   } catch (error) {
     log.warn('toPreviewImage failed', Errors.toLogFormat(error));
     return null;
-  } finally {
-    URL.revokeObjectURL(objectUrl);
   }
 }
 
