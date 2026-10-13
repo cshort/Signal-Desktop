@@ -72,6 +72,9 @@ asks only for what Signal offers and the rest of the page still works.
 
 What the page does and what it doesn't do yet, compared to Signal Desktop: [PARITY.md](PARITY.md).
 
+If Backchannel is useful to you, you can leave a tip at
+[ko-fi.com/gcbapps](https://ko-fi.com/gcbapps).
+
 ## How it works
 
 ```

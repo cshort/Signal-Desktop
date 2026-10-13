@@ -21,6 +21,8 @@
 > closed October 2026), so this stays a maintained fork that merges every
 > Signal release.
 >
+> Like it? Tips welcome at [ko-fi.com/gcbapps](https://ko-fi.com/gcbapps).
+>
 > Backchannel is not made, endorsed or supported by Signal Messenger;
 > "Signal" is their trademark. Everything below is Signal's own README.
 

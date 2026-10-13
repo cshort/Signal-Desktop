@@ -15,6 +15,9 @@ with. No prebuilt image is published: you build it from this repository,
 which builds Signal Desktop from source on your machine. It needs nothing
 else from you (no signal-cli or REST API).
 
+If Backchannel is useful to you, you can leave a tip at
+[ko-fi.com/gcbapps](https://ko-fi.com/gcbapps).
+
 ## Quick start
 
 You need an x86-64 Linux host with Docker and Compose (ARM hosts such as a
