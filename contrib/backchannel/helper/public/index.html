@@ -171,7 +171,23 @@
             title="Record voice message"
             aria-label="Record voice message"
           ></button>
-          <button type="submit" id="send">Send</button>
+          <button
+            type="button"
+            class="icon-button scheduled-open"
+            id="scheduled-open"
+            title="Scheduled messages"
+            aria-label="Scheduled messages"
+            hidden
+          >
+            <span class="scheduled-count" id="scheduled-count"></span>
+          </button>
+          <button
+            type="submit"
+            id="send"
+            title="Send (right-click or hold to schedule)"
+          >
+            Send
+          </button>
           <div class="recorder" id="recorder" hidden>
             <button
               type="button"
@@ -203,6 +219,44 @@
       hidden
     ></div>
     <div class="toast" id="toast" role="status" hidden></div>
+    <div class="modal-backdrop" id="schedule" hidden>
+      <div class="modal" role="dialog" aria-labelledby="schedule-title">
+        <div class="modal-head">
+          <span id="schedule-title">Schedule message</span>
+          <button
+            type="button"
+            class="icon-button"
+            id="schedule-close"
+            title="Close"
+            aria-label="Close"
+          ></button>
+        </div>
+        <div class="schedule-options" id="schedule-options"></div>
+        <div class="modal-foot">
+          <input
+            type="datetime-local"
+            id="schedule-at"
+            aria-label="Date and time"
+          />
+          <button type="button" id="schedule-send">Schedule</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-backdrop" id="scheduled" hidden>
+      <div class="modal" role="dialog" aria-labelledby="scheduled-title">
+        <div class="modal-head">
+          <span id="scheduled-title">Scheduled messages</span>
+          <button
+            type="button"
+            class="icon-button"
+            id="scheduled-close"
+            title="Close"
+            aria-label="Close"
+          ></button>
+        </div>
+        <ul class="scheduled-list" id="scheduled-list"></ul>
+      </div>
+    </div>
     <div class="modal-backdrop" id="forward" hidden>
       <div class="modal" role="dialog" aria-labelledby="forward-title">
         <div class="modal-head">

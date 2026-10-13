@@ -172,6 +172,7 @@ const ICONS = {
   mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3',
   check: 'M5 12.5l4.5 4.5L19 7.5',
   timer: 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM12 9v4l2.5 2M10 2h4',
+  clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3 2',
   pin: 'M9 4h6l-1 6 4 3v2H6v-2l4-3zM12 15v6',
   unpin: 'M9 4h6l-1 6 4 3v2H6v-2l4-3zM12 15v6M4 4l16 16',
   unread: 'M4 6h11M4 12h9M4 18h11M19 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z',
@@ -3412,6 +3413,8 @@ async function selectConversation(id) {
   cancelReply();
   resetLinkPreview();
   scheduleLinkPreview();
+  closeScheduledList();
+  renderScheduledButton();
   // Mentions name members of the chat they were typed in.
   dropComposeMentions();
   $('send-error').hidden = true;
@@ -4962,6 +4965,7 @@ async function loadState() {
   renderBanner();
   renderTitle();
   renderConversations();
+  loadScheduled().catch(() => {});
   if (selectedId && !conversations.has(selectedId)) {
     selectedId = null;
     cancelReply();
@@ -4996,6 +5000,13 @@ function connectEvents() {
     loadState().catch(() => {});
   });
   on('resync', () => loadState().catch(() => {}));
+  on('scheduled.changed', ({ counts }) => {
+    scheduledCounts = counts;
+    renderScheduledButton();
+    if (!$('scheduled').hidden) {
+      loadScheduled().catch(() => {});
+    }
+  });
   on('state', ({ state }) => {
     bridgeState = state;
     if (state !== 'ready') {
@@ -5077,7 +5088,8 @@ function connectEvents() {
 
 // --- composer ------------------------------------------------------------------
 
-async function sendCurrent() {
+// What the message box and the tray hold, ready to send; null if nothing.
+function prepareCompose() {
   const {
     body: rawBody,
     mentions: rawMentions,
@@ -5086,7 +5098,7 @@ async function sendCurrent() {
   const conversationId = selectedId;
   const files = editing ? [] : draftsFor(conversationId);
   if (!conversationId || (rawBody.trim() === '' && files.length === 0)) {
-    return;
+    return null;
   }
   // A caption is trimmed; mentions move with it.
   const lead =
@@ -5104,6 +5116,15 @@ async function sendCurrent() {
     ...(mentions.length > 0 ? { mentions } : {}),
     ...(formatting.length > 0 ? { formatting } : {}),
   };
+  return { conversationId, body, files, withMentions };
+}
+
+async function sendCurrent() {
+  const prepared = prepareCompose();
+  if (!prepared) {
+    return;
+  }
+  const { conversationId, body, files, withMentions } = prepared;
   $('send').disabled = true;
   $('send-error').hidden = true;
   // As Signal: sending goes back to the newest messages.
@@ -5164,6 +5185,292 @@ async function sendCurrent() {
     $('send').textContent = 'Send';
     focusCompose();
   }
+}
+
+// --- scheduled messages (decision F29) ------------------------------------------
+
+// Signal Desktop can't schedule; the helper keeps scheduled messages and
+// sends them through Signal when they come due. As Signal on Android: hold
+// (or right-click) Send to schedule; a clock by Send lists the chat's.
+let scheduledCounts = {};
+let scheduledItems = [];
+// { id } while a scheduled message is being moved to a new time.
+let rescheduling = null;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function formatScheduleTime(ms) {
+  const d = new Date(ms);
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const days = Math.floor((d - start) / DAY_MS);
+  if (days === 0) {
+    return `Today, ${time}`;
+  }
+  if (days === 1) {
+    return `Tomorrow, ${time}`;
+  }
+  const date = d.toLocaleDateString([], {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    ...(d.getFullYear() === start.getFullYear() ? {} : { year: 'numeric' }),
+  });
+  return `${date}, ${time}`;
+}
+
+// Signal Android's choices: this evening, tomorrow morning, next Monday.
+function schedulePresets(now = new Date()) {
+  const at = (days, hour) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + days);
+    d.setHours(hour, 0, 0, 0);
+    return d.getTime();
+  };
+  const presets = [];
+  if (now.getHours() < 17) {
+    presets.push(at(0, 18));
+  } else if (now.getHours() < 20) {
+    presets.push(at(0, 21));
+  }
+  presets.push(at(1, 8));
+  const toMonday = (8 - now.getDay()) % 7 || 7;
+  if (toMonday > 1) {
+    presets.push(at(toMonday, 8));
+  }
+  return presets;
+}
+
+function localInputValue(ms) {
+  const d = new Date(ms);
+  const p = n => String(n).padStart(2, '0');
+  return (
+    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` +
+    `T${p(d.getHours())}:${p(d.getMinutes())}`
+  );
+}
+
+function openSchedule(item = null) {
+  if (!item) {
+    if (editing) {
+      return;
+    }
+    if (replyTo?.privateFrom) {
+      toast("A private reply can't be scheduled.");
+      return;
+    }
+    if (!prepareCompose()) {
+      toast('Write a message first, then hold Send to schedule it.');
+      return;
+    }
+  }
+  rescheduling = item ? { id: item.id } : null;
+  $('schedule-title').textContent = item
+    ? 'Reschedule message'
+    : 'Schedule message';
+  $('schedule-options').replaceChildren(
+    ...schedulePresets().map(at => {
+      const option = el('button', 'schedule-option', formatScheduleTime(at));
+      option.type = 'button';
+      option.addEventListener('click', () => pickScheduleTime(at));
+      return option;
+    })
+  );
+  const now = Date.now();
+  const input = $('schedule-at');
+  input.min = localInputValue(now);
+  // An hour from now, on the quarter hour.
+  const suggested =
+    item?.sendAt > now
+      ? item.sendAt
+      : Math.ceil((now + 60 * 60 * 1000) / (15 * 60 * 1000)) * 15 * 60 * 1000;
+  input.value = localInputValue(suggested);
+  $('schedule-send').disabled = false;
+  $('schedule').hidden = false;
+  $('schedule-options').querySelector('button')?.focus();
+}
+
+function closeSchedule() {
+  rescheduling = null;
+  $('schedule').hidden = true;
+}
+
+async function pickScheduleTime(sendAt) {
+  if (!Number.isFinite(sendAt) || sendAt <= Date.now()) {
+    toast('Pick a time in the future.');
+    return;
+  }
+  for (const b of $('schedule').querySelectorAll('button')) {
+    b.disabled = true;
+  }
+  try {
+    if (rescheduling) {
+      await api('api/scheduled/update', { id: rescheduling.id, sendAt });
+      toast(`Rescheduled for ${formatScheduleTime(sendAt)}`);
+    } else {
+      await scheduleCurrent(sendAt);
+    }
+    closeSchedule();
+  } catch (error) {
+    toast(`Not scheduled (${error.code ?? error.message}).`);
+  } finally {
+    for (const b of $('schedule').querySelectorAll('button')) {
+      b.disabled = false;
+    }
+  }
+}
+
+async function saveScheduledFile(file) {
+  const params = new URLSearchParams({
+    contentType: file.type || 'application/octet-stream',
+    ...(file.name ? { name: file.name } : {}),
+  });
+  const res = await fetch(`api/scheduleFile?${params}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: file,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(data.error?.message ?? `HTTP ${res.status}`);
+    error.code = data.error?.code ?? `HTTP ${res.status}`;
+    throw error;
+  }
+  return data;
+}
+
+async function scheduleCurrent(sendAt) {
+  const prepared = prepareCompose();
+  if (!prepared) {
+    return;
+  }
+  const { conversationId, body, files, withMentions } = prepared;
+  const saved = [];
+  for (const draft of files) {
+    // oxlint-disable-next-line no-await-in-loop
+    saved.push(await saveScheduledFile(draft.file));
+  }
+  await api('api/schedule', {
+    conversationId,
+    sendAt,
+    body,
+    ...withMentions,
+    ...(replyTo ? { quoteMessageId: replyTo.id } : {}),
+    ...(composePreview?.url && saved.length === 0
+      ? { linkPreviewUrl: composePreview.url }
+      : {}),
+    files: saved,
+  });
+  resetLinkPreview();
+  clearDrafts(conversationId);
+  setCompose('');
+  cancelReply();
+  toast(`Scheduled for ${formatScheduleTime(sendAt)}`);
+}
+
+function renderScheduledButton() {
+  const count = (selectedId && scheduledCounts[selectedId]) || 0;
+  const button = $('scheduled-open');
+  button.hidden = count === 0;
+  $('scheduled-count').textContent = count > 1 ? String(count) : '';
+  const label =
+    count === 1 ? '1 scheduled message' : `${count} scheduled messages`;
+  button.title = label;
+  button.setAttribute('aria-label', label);
+}
+
+async function loadScheduled() {
+  const params = new URLSearchParams({ conversationId: selectedId ?? '' });
+  const { items, counts } = await api(`api/scheduled?${params}`);
+  scheduledCounts = counts;
+  scheduledItems = selectedId ? items : [];
+  renderScheduledButton();
+  if (!$('scheduled').hidden) {
+    renderScheduledList();
+  }
+}
+
+// The text as it will read: mentions by name.
+function scheduledText(item) {
+  const at = new Map(item.mentions.map(m => [m.start, m.conversationId]));
+  let text = '';
+  for (let i = 0; i < item.body.length; i += 1) {
+    text += at.has(i) ? `@${nameOf(at.get(i))}` : item.body[i];
+  }
+  return text.trim();
+}
+
+function renderScheduledList() {
+  const list = $('scheduled-list');
+  if (scheduledItems.length === 0) {
+    closeScheduledList();
+    return;
+  }
+  list.replaceChildren(
+    ...scheduledItems.map(item => {
+      const li = el('li', item.failed ? 'failed' : '');
+      const when = el('div', 'scheduled-when', formatScheduleTime(item.sendAt));
+      if (item.failed) {
+        when.append(
+          el('span', 'scheduled-failed', ` · Not sent (${item.failed})`)
+        );
+      }
+      const files =
+        item.files.length === 0
+          ? ''
+          : item.files.length === 1
+            ? (item.files[0].fileName ?? '1 file')
+            : `${item.files.length} files`;
+      const text = scheduledText(item);
+      li.append(
+        when,
+        el('div', 'scheduled-text', text || files),
+        ...(text && files ? [el('div', 'scheduled-files sub', files)] : [])
+      );
+      const actions = el('div', 'scheduled-actions');
+      const action = (label, onClick, className = 'secondary') => {
+        const b = el('button', className, label);
+        b.type = 'button';
+        b.addEventListener('click', async () => {
+          b.disabled = true;
+          try {
+            await onClick();
+          } catch (error) {
+            toast(`Failed (${error.code ?? error.message}).`);
+          } finally {
+            b.disabled = false;
+          }
+        });
+        return b;
+      };
+      actions.append(
+        action('Delete', () => api('api/scheduled/delete', { id: item.id })),
+        action('Reschedule', () => openSchedule(item)),
+        action(
+          'Send now',
+          () => api('api/scheduled/sendNow', { id: item.id }),
+          ''
+        )
+      );
+      li.append(actions);
+      return li;
+    })
+  );
+}
+
+async function openScheduledList() {
+  $('scheduled').hidden = false;
+  try {
+    await loadScheduled();
+  } catch {
+    // The list shows what it had.
+  }
+  renderScheduledList();
+}
+
+function closeScheduledList() {
+  $('scheduled').hidden = true;
 }
 
 // --- message box: mentions and formatting ----------------------------------------
@@ -7148,7 +7455,56 @@ $('search-open').addEventListener('click', () => {
 
 $('composer').addEventListener('submit', e => {
   e.preventDefault();
+  if (sendHeld) {
+    sendHeld = false;
+    return;
+  }
   sendCurrent();
+});
+// Hold or right-click Send to schedule (decision F29).
+let sendHeld = false;
+let sendHoldTimer = null;
+$('send').addEventListener('contextmenu', e => {
+  e.preventDefault();
+  openSchedule();
+});
+$('send').addEventListener('pointerdown', e => {
+  sendHeld = false;
+  if (e.pointerType !== 'mouse') {
+    sendHoldTimer = setTimeout(() => {
+      sendHeld = true;
+      openSchedule();
+    }, 500);
+  }
+});
+for (const type of ['pointerup', 'pointerleave', 'pointercancel']) {
+  $('send').addEventListener(type, () => clearTimeout(sendHoldTimer));
+}
+$('schedule-close').append(icon('close'));
+$('schedule-close').addEventListener('click', closeSchedule);
+$('schedule').addEventListener('click', e => {
+  if (e.target === $('schedule')) {
+    closeSchedule();
+  }
+});
+$('schedule-send').addEventListener('click', () => {
+  const value = $('schedule-at').value;
+  pickScheduleTime(value ? new Date(value).getTime() : NaN);
+});
+$('schedule-at').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    $('schedule-send').click();
+  }
+});
+$('scheduled-open').prepend(icon('clock'));
+$('scheduled-open').addEventListener('click', openScheduledList);
+$('scheduled-close').append(icon('close'));
+$('scheduled-close').addEventListener('click', closeScheduledList);
+$('scheduled').addEventListener('click', e => {
+  if (e.target === $('scheduled')) {
+    closeScheduledList();
+  }
 });
 $('compose').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
@@ -7204,7 +7560,11 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     closePopovers();
     closeLightbox();
-    if (!$('forward').hidden) {
+    if (!$('schedule').hidden) {
+      closeSchedule();
+    } else if (!$('scheduled').hidden) {
+      closeScheduledList();
+    } else if (!$('forward').hidden) {
       closeForward();
     } else if (!$('new-chat').hidden) {
       closeNewChat();

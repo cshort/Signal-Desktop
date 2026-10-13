@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -642,6 +642,115 @@ describe('backchannel helper', () => {
       bridge.calls.findLast(c => c.method === 'messages.sendText').params,
       { conversationId: 'c1', body: '', attachmentUploadIds: [uploadId] }
     );
+  });
+
+  it('sends a scheduled message with its file when it comes due', async () => {
+    const conversationId = bridge.conversations[0].id;
+    const bytes = Buffer.alloc(700_000, 3);
+    const file = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/scheduleFile?contentType=image%2Fpng&name=later.png`,
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: bytes,
+    });
+    assert.equal(file.status, 200);
+    const meta = JSON.parse(file.text);
+    const scheduled = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/schedule`,
+      headers: json,
+      body: {
+        conversationId,
+        sendAt: Date.now() + 1500,
+        body: 'see you then',
+        files: [meta],
+      },
+    });
+    assert.equal(scheduled.status, 200);
+    const list = JSON.parse(
+      (
+        await http(port, {
+          path: `/${helper.token}/api/scheduled?conversationId=${conversationId}`,
+        })
+      ).text
+    );
+    assert.equal(list.items.length, 1);
+    assert.equal(list.counts[conversationId], 1);
+
+    const before = bridge.calls.filter(
+      c => c.method === 'messages.sendText'
+    ).length;
+    await waitFor(
+      () =>
+        bridge.calls.filter(c => c.method === 'messages.sendText').length >
+        before,
+      5000
+    );
+    const send = bridge.calls.findLast(c => c.method === 'messages.sendText');
+    assert.equal(send.params.body, 'see you then');
+    const upload = bridge.uploads.get(send.params.attachmentUploadIds[0]);
+    assert.ok(Buffer.concat(upload.bytes).equals(bytes));
+    await waitFor(
+      () => !existsSync(join(helper.config, 'scheduled-files', meta.fileId))
+    );
+    const after = JSON.parse(
+      (await http(port, { path: `/${helper.token}/api/scheduled` })).text
+    );
+    assert.deepEqual(after.items, []);
+  });
+
+  it('edits, sends now and deletes scheduled messages', async () => {
+    const conversationId = bridge.conversations[0].id;
+    const add = async () =>
+      JSON.parse(
+        (
+          await http(port, {
+            method: 'POST',
+            path: `/${helper.token}/api/schedule`,
+            headers: json,
+            body: {
+              conversationId,
+              sendAt: Date.now() + 3_600_000,
+              body: 'later',
+            },
+          })
+        ).text
+      ).item;
+    const first = await add();
+    const edited = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/scheduled/update`,
+      headers: json,
+      body: { id: first.id, body: 'much later' },
+    });
+    assert.equal(JSON.parse(edited.text).item.body, 'much later');
+    await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/scheduled/sendNow`,
+      headers: json,
+      body: { id: first.id },
+    });
+    const send = bridge.calls.findLast(c => c.method === 'messages.sendText');
+    assert.equal(send.params.body, 'much later');
+
+    const second = await add();
+    await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/scheduled/delete`,
+      headers: json,
+      body: { id: second.id },
+    });
+    const list = JSON.parse(
+      (await http(port, { path: `/${helper.token}/api/scheduled` })).text
+    );
+    assert.deepEqual(list.items, []);
+    const unknown = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/schedule`,
+      headers: json,
+      body: { conversationId: 'nope', sendAt: Date.now(), body: 'x' },
+    });
+    assert.equal(unknown.status, 404);
   });
 
   it('takes uploads only as application/octet-stream', async () => {

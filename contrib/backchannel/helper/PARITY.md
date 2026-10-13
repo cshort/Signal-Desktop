@@ -63,21 +63,22 @@ Last reviewed: 2026-10-13, against the Signal release in fork main.
 
 ## Composer
 
-| Feature                                         | Status    | Notes                |
-| ----------------------------------------------- | --------- | -------------------- |
-| Text, @mentions                                 | done      | F7                   |
-| Bold, italic, strikethrough, monospace, spoiler | done      | F8                   |
-| Emoji picker with skin tones                    | done      | F5, F11              |
-| Attach files, paste and drop images             | done      | F4                   |
-| Forward to any number of chats                  | different | F4: no limit of five |
-| Stickers, also as replies                       | done      | F10, F28             |
-| Send link previews                              | done      | F27                  |
-| Record voice notes                              | done      | F19                  |
-| Send contact cards                              | missing   |                      |
-| GIF search                                      | missing   |                      |
-| Typing indicators (send them)                   | done      | F14                  |
-| Send view-once media                            | missing   |                      |
-| Sent media quality per message                  | missing   | the setting applies  |
+| Feature                                         | Status    | Notes                                        |
+| ----------------------------------------------- | --------- | -------------------------------------------- |
+| Text, @mentions                                 | done      | F7                                           |
+| Bold, italic, strikethrough, monospace, spoiler | done      | F8                                           |
+| Emoji picker with skin tones                    | done      | F5, F11                                      |
+| Attach files, paste and drop images             | done      | F4                                           |
+| Forward to any number of chats                  | different | F4: no limit of five                         |
+| Stickers, also as replies                       | done      | F10, F28                                     |
+| Send link previews                              | done      | F27                                          |
+| Scheduled messages                              | different | F29: Desktop has none; the helper sends them |
+| Record voice notes                              | done      | F19                                          |
+| Send contact cards                              | missing   |                                              |
+| GIF search                                      | missing   |                                              |
+| Typing indicators (send them)                   | done      | F14                                          |
+| Send view-once media                            | missing   |                                              |
+| Sent media quality per message                  | missing   | the setting applies                          |
 
 ## Settings
 

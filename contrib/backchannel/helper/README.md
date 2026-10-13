@@ -126,6 +126,17 @@ checked against Signal's digest and kept in the config folder. The token and key
 read. Another account on the same computer that learned the token could use
 it; on a computer shared with untrusted users, don't run this.
 
+### Scheduled messages
+
+Hold or right-click Send to schedule a message; a clock next to Send lists
+the chat's scheduled messages (send now, reschedule, delete). Signal Desktop
+has no scheduling and Signal's servers keep nothing, so the helper keeps
+them, with their files, in the config folder (`scheduled.json` and
+`scheduled-files/`, readable only by your account, not encrypted) and sends
+each through Signal when it comes due. They go out only while the helper and
+Signal are running; one that came due while either was down goes as soon as
+both are back.
+
 ## Setup (Windows)
 
 1. Install [Node.js](https://nodejs.org) 20 or newer, and run Signal

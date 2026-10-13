@@ -139,6 +139,7 @@ export function checkRequest(req, { origins, token }) {
     const type = (req.headers['content-type'] ?? '').split(';')[0].trim();
     const upload =
       path.endsWith('/api/upload') ||
+      path.endsWith('/api/scheduleFile') ||
       path.endsWith('/api/profilePhoto') ||
       path.endsWith('/api/groups') ||
       path.endsWith('/api/groupInfo');
@@ -210,6 +211,7 @@ export function createWebServer({
   store,
   bridge,
   privateReplies = null,
+  scheduled = null,
   log,
 }) {
   const streams = new Set();
@@ -316,6 +318,25 @@ export function createWebServer({
       sendJson(res, 400, { error: { code: 'INVALID_ARGUMENT' } });
       return;
     }
+    const uploadId = await uploadStream(req, {
+      size,
+      contentType,
+      fileName,
+      voiceNote,
+    });
+    if (!uploadId) {
+      sendJson(res, 400, { error: { code: 'INVALID_ARGUMENT' } });
+      return;
+    }
+    sendJson(res, 200, { uploadId });
+  }
+
+  // Hands a stream of `size` bytes to Signal as an upload; null if the
+  // stream wasn't that long.
+  async function uploadStream(
+    stream,
+    { size, contentType, fileName, voiceNote }
+  ) {
     const { uploadId } = await bridge.call('attachments.uploadBegin', {
       contentType,
       size,
@@ -340,7 +361,7 @@ export function createWebServer({
         offset += chunk.length;
       }
     };
-    for await (const chunk of req) {
+    for await (const chunk of stream) {
       pending.push(chunk);
       pendingBytes += chunk.length;
       if (pendingBytes >= ATTACHMENT_CHUNK_BYTES) {
@@ -348,11 +369,7 @@ export function createWebServer({
       }
     }
     await flush();
-    if (offset !== size) {
-      sendJson(res, 400, { error: { code: 'INVALID_ARGUMENT' } });
-      return;
-    }
-    sendJson(res, 200, { uploadId });
+    return offset === size ? uploadId : null;
   }
 
   // Streams decrypted attachment content from Signal in chunks, honoring
@@ -419,6 +436,84 @@ export function createWebServer({
       offset += bytes.length;
     }
     res.end();
+  }
+
+  // Scheduled messages (decision F29), kept by the helper.
+  async function handleScheduled(req, res, route, url) {
+    if (req.method === 'GET' && route === 'api/scheduled') {
+      sendJson(res, 200, {
+        items: scheduled.list(url.searchParams.get('conversationId') ?? ''),
+        counts: scheduled.counts(),
+      });
+      return;
+    }
+    if (req.method === 'POST' && route === 'api/scheduleFile') {
+      const file = await scheduled.saveFile(req, {
+        size: Number(req.headers['content-length']),
+        contentType: url.searchParams.get('contentType') ?? '',
+        fileName: url.searchParams.get('name') || null,
+      });
+      sendJson(res, 200, file);
+      return;
+    }
+    if (req.method === 'POST' && route === 'api/schedule') {
+      const {
+        conversationId,
+        sendAt,
+        body,
+        mentions,
+        formatting,
+        quoteMessageId,
+        linkPreviewUrl,
+        files,
+      } = await readJson(req);
+      // Signal checks the chat again when it sends.
+      if (!store.snapshot().conversations.some(c => c.id === conversationId)) {
+        sendJson(res, 404, { error: { code: 'NOT_FOUND' } });
+        return;
+      }
+      const item = scheduled.add({
+        conversationId,
+        sendAt,
+        body: body ?? '',
+        mentions,
+        formatting,
+        quoteMessageId,
+        linkPreviewUrl,
+        files,
+      });
+      sendJson(res, 200, { item });
+      return;
+    }
+    if (req.method === 'POST' && route === 'api/scheduled/update') {
+      const { id, sendAt, body } = await readJson(req);
+      const item = scheduled.update(id, { sendAt, body });
+      sendJson(
+        res,
+        item ? 200 : 404,
+        item ? { item } : { error: { code: 'NOT_FOUND' } }
+      );
+      return;
+    }
+    if (req.method === 'POST' && route === 'api/scheduled/delete') {
+      const { id } = await readJson(req);
+      sendJson(res, 200, { removed: scheduled.remove(id) });
+      return;
+    }
+    if (req.method === 'POST' && route === 'api/scheduled/sendNow') {
+      const { id } = await readJson(req);
+      const found = scheduled.sendNow(id);
+      if (found) {
+        await scheduled.run(scheduled.ready);
+      }
+      sendJson(
+        res,
+        found ? 200 : 404,
+        found ? {} : { error: { code: 'NOT_FOUND' } }
+      );
+      return;
+    }
+    sendJson(res, 404, { error: { code: 'NOT_FOUND' } });
   }
 
   async function handleApi(req, res, route, url) {
@@ -796,6 +891,10 @@ export function createWebServer({
       );
       return;
     }
+    if (scheduled && route.startsWith('api/schedule')) {
+      await handleScheduled(req, res, route, url);
+      return;
+    }
     if (req.method === 'GET' && route === 'api/privateReplies') {
       const conversationId = url.searchParams.get('conversationId') ?? '';
       sendJson(res, 200, {
@@ -993,6 +1092,7 @@ export function createWebServer({
   return {
     server,
     broadcast,
+    uploadStream,
     // A new connection may come with a different Signal or settings.
     forgetCachedState() {
       emojiCatalog = null;

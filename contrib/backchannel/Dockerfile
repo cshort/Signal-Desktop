@@ -52,6 +52,7 @@ COPY --from=build /usr/local/bin/node /usr/local/bin/node
 COPY contrib/backchannel/helper/bridge.mjs contrib/backchannel/helper/server.mjs \
   contrib/backchannel/helper/store.mjs contrib/backchannel/helper/backchannel.mjs \
   contrib/backchannel/helper/fonts.mjs contrib/backchannel/helper/privateReplies.mjs \
+  contrib/backchannel/helper/scheduled.mjs \
   /opt/backchannel/
 COPY contrib/backchannel/helper/public /opt/backchannel/public
 # Signal's voice note encoder, for recording voice notes on the page.

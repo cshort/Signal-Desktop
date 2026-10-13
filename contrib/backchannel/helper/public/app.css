@@ -3425,3 +3425,127 @@ label.poll-option {
 .private-link:hover {
   text-decoration: underline;
 }
+
+/* Scheduled messages (decision F29). */
+.composer .scheduled-open {
+  position: relative;
+}
+
+.scheduled-count {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.scheduled-count:empty {
+  display: none;
+}
+
+.schedule-options {
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px 8px;
+}
+
+.schedule-option {
+  padding: 10px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.schedule-option:hover {
+  background: var(--hover);
+}
+
+#schedule {
+  z-index: 32;
+}
+
+#schedule-at {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: var(--hover);
+  color: var(--text);
+  font: inherit;
+  color-scheme: light dark;
+}
+
+.scheduled-list {
+  flex: 1;
+  margin: 0;
+  padding: 0 8px 8px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.scheduled-list li {
+  padding: 10px 8px;
+  border-top: 1px solid var(--border);
+}
+
+.scheduled-list li:first-child {
+  border-top: none;
+}
+
+.scheduled-when {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.scheduled-failed {
+  color: var(--error);
+  font-weight: 400;
+}
+
+.scheduled-text {
+  margin-top: 2px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.scheduled-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.scheduled-actions button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 16px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.scheduled-actions button.secondary {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.scheduled-actions button:disabled {
+  opacity: 0.5;
+}

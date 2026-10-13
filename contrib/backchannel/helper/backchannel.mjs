@@ -24,6 +24,7 @@
 
 import { randomBytes } from 'node:crypto';
 import {
+  createReadStream,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -42,6 +43,7 @@ import {
 } from './bridge.mjs';
 import { largeEmojiFontLoader } from './fonts.mjs';
 import { PrivateReplies } from './privateReplies.mjs';
+import { ScheduledMessages } from './scheduled.mjs';
 import { allowedOrigins, createWebServer } from './server.mjs';
 import { Store } from './store.mjs';
 
@@ -158,12 +160,54 @@ const bridge = new Bridge({
     store.state = BridgeState.Ready;
     log(`loaded ${store.snapshot().conversations.length} conversations`);
     web.broadcast('resync', {});
+    // Anything that came due while Signal was away goes now.
+    await scheduled.run(scheduled.ready);
   },
   onEvent(event) {
     store.apply(event);
     web.broadcast(event.event, event.data);
   },
 });
+
+// Scheduled messages (decision F29): sent through Signal when due.
+const scheduled = new ScheduledMessages(configDir, {
+  async send(item) {
+    const attachmentUploadIds = [];
+    for (const f of item.files) {
+      // oxlint-disable-next-line no-await-in-loop
+      const uploadId = await web.uploadStream(
+        createReadStream(scheduled.filePath(f.fileId)),
+        {
+          size: f.size,
+          contentType: f.contentType,
+          fileName: f.fileName ?? undefined,
+        }
+      );
+      if (!uploadId) {
+        throw Object.assign(new Error('file changed'), {
+          code: 'INVALID_ARGUMENT',
+        });
+      }
+      attachmentUploadIds.push(uploadId);
+    }
+    await bridge.call('messages.sendText', {
+      conversationId: item.conversationId,
+      body: item.body,
+      ...(item.mentions.length ? { mentions: item.mentions } : {}),
+      ...(item.formatting.length ? { formatting: item.formatting } : {}),
+      ...(item.quoteMessageId ? { quoteMessageId: item.quoteMessageId } : {}),
+      ...(item.linkPreviewUrl && attachmentUploadIds.length === 0
+        ? { linkPreviewUrl: item.linkPreviewUrl }
+        : {}),
+      ...(attachmentUploadIds.length ? { attachmentUploadIds } : {}),
+    });
+  },
+  onChange() {
+    web?.broadcast('scheduled.changed', { counts: scheduled.counts() });
+  },
+  log,
+});
+scheduled.ready = () => store.state === BridgeState.Ready;
 
 web = createWebServer({
   port: args.port,
@@ -180,6 +224,7 @@ web = createWebServer({
   store,
   bridge,
   privateReplies: new PrivateReplies(join(configDir, 'private-replies.json')),
+  scheduled,
   log,
 });
 
@@ -205,9 +250,11 @@ if (process.stdout.isTTY) {
   );
 }
 bridge.start();
+scheduled.start();
 
 async function shutdown() {
   log('stopping');
+  scheduled.stop();
   await bridge.stop();
   await web.close();
   process.exit(0);

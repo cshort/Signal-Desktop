@@ -801,3 +801,26 @@ while a reply is pending sends it as the reply.
 WHY: Mike asked (2026-10-13 13:23 PT). Signal hasn't turned the flag on,
 so some recipients' apps may show the sticker without the quote until it
 does.
+
+## F29. Fork only: scheduled messages
+
+DECISION: the Backchannel helper keeps scheduled messages and sends them
+through the bridge when they come due; Signal and the bridge are unchanged.
+They live in the helper's config folder (`scheduled.json` and
+`scheduled-files/`, mode 600, at most 500 messages and 100 MB per file),
+with the text, mentions, styles, quote, link preview and files as they were
+when scheduled. A check runs at least once a minute; a message whose time
+passed while the helper or Signal was down goes out once both are back, as
+on Signal Android. Signal-side refusals that a retry can't fix (chat gone,
+not allowed, invalid) mark it "not sent" for the user to reschedule, send
+now or delete; anything else waits for the next check. On the page, hold or
+right-click Send to schedule (this evening, tomorrow 8 AM, next Monday 8 AM,
+or a chosen time), and a clock by Send lists the chat's. A private reply
+can't be scheduled.
+
+WHY: Mike asked (2026-10-13 13:28 PT). Signal Desktop has no scheduling and
+Signal's protocol has none server-side (Android keeps them on the phone),
+so something running has to hold them; the helper already runs next to
+Signal, and on a server it sends while every other device is off. Keeping
+them in Signal's database would need a new bridge surface for no gain: the
+database key sits on the same disk.
