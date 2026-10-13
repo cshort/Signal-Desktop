@@ -736,3 +736,15 @@ is: in the same chat, or in a group the client can see.
 
 WHY: Mike's request; it only works for members of the group, which the
 checks above enforce.
+
+## F24. Fork only: a separate public repo for Backchannel
+
+DECISION: github.com/mikesimone/backchannel is the public front door:
+README, screenshots, setup, releases and issues. The code stays here,
+because almost every feature changes the bridge and the page together. Its
+compose.yml builds this repository at a release tag
+(`backchannel-vX.Y`, Docker's git build context), so users get a version
+that ran on Six, not main. Six itself keeps building from this fork's main.
+
+WHY: Mike asked how people would find a folder inside a Signal fork
+(2026-10-13 12:28 PT) and deferred to judgement on a new repo.

@@ -12,6 +12,8 @@
 > sending polls to any number of chats. Signal keeps every key; the page
 > never sees one.
 >
+> - **Start here:** [github.com/mikesimone/backchannel](https://github.com/mikesimone/backchannel)
+>   has the setup guide and releases, and takes issues.
 > - Run it on a server in Docker: [contrib/backchannel](contrib/backchannel)
 > - Run it next to Signal on your own PC: [contrib/backchannel/helper](contrib/backchannel/helper)
 > - Security design: [docs/external-client-threat-model.md](docs/external-client-threat-model.md)

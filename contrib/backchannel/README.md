@@ -1,5 +1,9 @@
 # Backchannel
 
+> **Setting it up? Use [github.com/mikesimone/backchannel](https://github.com/mikesimone/backchannel).**
+> It builds a tested release of this folder, and it's where issues go.
+> This folder is the source, for building from the fork's main branch.
+
 Your Signal chats in a browser tab (Rambox, Ferdium, or any browser),
 served from a container on your own server. The container runs Signal
 Desktop built from this fork on a virtual display, linked to your phone as
