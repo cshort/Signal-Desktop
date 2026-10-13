@@ -159,6 +159,22 @@ function openEvents(port, token) {
   return { events, opened, close: () => req.destroy() };
 }
 
+describe('the page script', () => {
+  // A second top-level function with the same name silently replaces the
+  // first one (F21 broke the message hover buttons that way).
+  it('declares each top-level function once', () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'app.js'),
+      'utf8'
+    );
+    const names = [
+      ...source.matchAll(/^(?:async )?function\*? *([A-Za-z0-9_$]+)/gm),
+    ].map(match => match[1]);
+    const repeated = names.filter((name, i) => names.indexOf(name) !== i);
+    assert.deepEqual(repeated, []);
+  });
+});
+
 describe('backchannel helper', () => {
   const dir = mkdtempSync(join(tmpdir(), 'srb-sock-'));
   const socketPath = bridgePath(dir);

@@ -2680,7 +2680,7 @@ function personTitle(author, conversationId, fallback = 'Someone') {
   return (author ?? authorOf(conversationId))?.title ?? fallback;
 }
 
-function actionButton(label, onClick, className = '') {
+function groupButton(label, onClick, className = '') {
   const b = el('button', `setting-button small ${className}`.trim(), label);
   b.type = 'button';
   b.addEventListener('click', ev => {
@@ -2841,7 +2841,7 @@ function groupRequestRows(c, d, manage) {
       );
       if (canAct) {
         row.append(
-          actionButton('Deny', () => {
+          groupButton('Deny', () => {
             if (confirm(`Deny the request from ${name}?`)) {
               changeGroup(c.id, {
                 action: 'denyRequest',
@@ -2849,7 +2849,7 @@ function groupRequestRows(c, d, manage) {
               });
             }
           }),
-          actionButton(
+          groupButton(
             'Approve',
             () => {
               if (confirm(`Add ${name} to the group?`)) {
@@ -2893,7 +2893,7 @@ function groupRequestRows(c, d, manage) {
       );
       if (manage) {
         row.append(
-          actionButton('Revoke', () => {
+          groupButton('Revoke', () => {
             if (confirm(`Revoke the invitation to ${name}?`)) {
               changeGroup(c.id, {
                 action: 'revokeInvites',
@@ -2932,7 +2932,7 @@ function groupRequestRows(c, d, manage) {
       );
       if (canAct) {
         row.append(
-          actionButton('Revoke', () => {
+          groupButton('Revoke', () => {
             if (
               confirm(
                 `Revoke ${invites.length === 1 ? 'the invitation' : `${invites.length} invitations`} sent by ${inviter}?`
