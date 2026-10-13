@@ -93,8 +93,18 @@ runs the same x86-64 Linux container inside WSL 2.
    on that PC the address from `screen.sh url` opens in any browser or in
    Rambox as is. VNC is at `localhost:5901` after `screen.sh vnc`.
 
+It is only online while that PC is awake and Docker Desktop is running;
+messages still reach your phone, and it catches up when it comes back, as
+Signal Desktop does.
+
 Give WSL enough memory for the build (`.wslconfig`, `memory=8GB` or more,
 if the build is killed).
+
+### Removing it
+
+On your phone, Settings > Linked devices: unlink the device. Then
+`docker compose down`, delete the data folder (it holds the Signal
+profile and keys) and, if you like, `docker image rm backchannel`.
 
 ## Pieces
 
