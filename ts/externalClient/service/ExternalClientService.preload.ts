@@ -36,6 +36,7 @@ import {
   sendPoll,
   votePoll,
 } from './ExternalClientOutgoing.preload.ts';
+import { updateConversation } from './ExternalClientChats.preload.ts';
 import { getMembers } from './ExternalClientMentions.preload.ts';
 import {
   getProfile,
@@ -386,6 +387,13 @@ async function dispatch(
       }
       const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
       return params.success ? setTyping(params.data) : invalid;
+    }
+    case Method.ConversationsUpdate: {
+      if (!window.ConversationController.isInitialFetchComplete()) {
+        return notReady;
+      }
+      const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
+      return params.success ? updateConversation(params.data) : invalid;
     }
     case Method.ProfileGet: {
       if (!window.ConversationController.isInitialFetchComplete()) {

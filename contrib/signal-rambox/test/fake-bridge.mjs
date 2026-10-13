@@ -56,6 +56,9 @@ export function makeConversation(overrides = {}) {
     avatarVersion: null,
     lastMessage: null,
     pinnedIndex: null,
+    mutedUntil: null,
+    disappearingSeconds: 0,
+    canChangeTimer: true,
     ...overrides,
   };
 }
@@ -155,6 +158,7 @@ export class FakeBridge {
     'settings.manage',
     'typing.read',
     'typing.send',
+    'conversations.manage',
   ];
   // `${messageId}:${index}` -> { contentType, bytes }
   attachments = new Map();
@@ -449,6 +453,7 @@ export class FakeBridge {
           }),
         });
         return;
+      case 'conversations.update':
       case 'conversations.setTyping':
       case 'messages.markRead':
       case 'messages.react':

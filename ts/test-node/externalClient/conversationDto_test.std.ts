@@ -56,6 +56,9 @@ describe('externalClient/conversationDto', () => {
       avatarVersion: null,
       lastMessage: null,
       pinnedIndex: null,
+      mutedUntil: null,
+      disappearingSeconds: 0,
+      canChangeTimer: true,
     });
   });
 

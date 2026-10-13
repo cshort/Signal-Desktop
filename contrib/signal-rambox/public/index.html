@@ -60,6 +60,14 @@
             <span id="chat-title"></span>
             <span id="chat-sub" class="sub"></span>
           </span>
+          <button
+            id="chat-menu-open"
+            class="icon-button"
+            type="button"
+            title="Chat settings"
+            aria-label="Chat settings"
+            aria-haspopup="menu"
+          ></button>
         </header>
         <div class="messages" id="messages" hidden>
           <button id="older" class="older" type="button" hidden>
@@ -80,6 +88,7 @@
           ></button>
         </div>
         <div class="draft-tray" id="draft-tray" hidden></div>
+        <div class="request-bar" id="request-bar" hidden></div>
         <form class="composer" id="composer" hidden>
           <button
             type="button"

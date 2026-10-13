@@ -527,6 +527,15 @@ export function createWebServer({
       sendJson(res, 200, result);
       return;
     }
+    if (req.method === 'POST' && route === 'api/conversation') {
+      const { conversationId, change } = await readJson(req);
+      sendJson(
+        res,
+        200,
+        await bridge.call('conversations.update', { conversationId, change })
+      );
+      return;
+    }
     if (req.method === 'POST' && route === 'api/typing') {
       const { conversationId, typing } = await readJson(req);
       sendJson(

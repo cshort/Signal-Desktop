@@ -509,7 +509,7 @@ DECISION: The vocabulary's `typing.read` and `typing.send` capabilities are
 now implemented (two more lines in Signal's approval dialog).
 
 - Topic `typing` (needs `typing.read`) sends `typing.changed {conversationId,
-  typists: [{authorConversationId, author}]}` whenever the people typing in
+typists: [{authorConversationId, author}]}` whenever the people typing in
   a listed chat change, read from the same Redux state Signal's timeline
   uses; an empty list means nobody is. Whoever is typing at subscribe time
   is sent first.
@@ -523,3 +523,23 @@ now implemented (two more lines in Signal's approval dialog).
 
 WHY: The first gap on Mike's standing parity rule (2026-10-13).
 
+## F15. Fork only: Signal's chat menu
+
+DECISION: A new capability, `conversations.manage` (one more line in
+Signal's approval dialog), allows `conversations.update {conversationId,
+change}`, where `change` is one of Signal's chat menu actions: mute (for a
+duration, or always), unmute, pin or unpin (Signal's limit of four pinned
+chats answers PRECONDITION_FAILED), archive or unarchive, mark as unread,
+set the disappearing messages timer, block, accept (which is also how
+Signal unblocks) and delete chat. Each dispatches the same Redux action as
+Signal's header menu or chat-list context menu, so it syncs to the phone
+the same way. ConversationDTO gains `mutedUntil`, `disappearingSeconds` and
+`canChangeTimer`.
+
+The page has a menu button in the chat header and a right-click menu on
+chat list rows, with Signal's mute and timer choices; an "Archived chats"
+view at the end of the list; and Signal's bar for message requests and
+blocked chats (Accept, Block, Delete / Unblock, Delete) in place of the
+composer. Block, unblock and delete ask first with Signal's own words.
+
+WHY: The second gap on Mike's standing parity rule (2026-10-13).

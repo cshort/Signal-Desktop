@@ -48,6 +48,9 @@ export const Capability = {
   NotificationsManage: 'notifications.manage',
   // Fork addition: read and change Signal's settings, as its Settings page.
   SettingsManage: 'settings.manage',
+  // Fork addition: pin, archive, mute, block, accept and delete chats, and
+  // set their disappearing timer, as Signal's chat menus do.
+  ConversationsManage: 'conversations.manage',
 } as const;
 export type CapabilityType = (typeof Capability)[keyof typeof Capability];
 export const ALL_CAPABILITIES: ReadonlyArray<CapabilityType> =
@@ -66,6 +69,7 @@ export const IMPLEMENTED_CAPABILITIES: ReadonlyArray<CapabilityType> = [
   Capability.SettingsManage,
   Capability.TypingRead,
   Capability.TypingSend,
+  Capability.ConversationsManage,
 ];
 
 export const ErrorCode = {
@@ -143,6 +147,7 @@ export const Method = {
   ProfileSet: 'profile.set',
   ProfileSetAvatar: 'profile.setAvatar',
   ConversationsSetTyping: 'conversations.setTyping',
+  ConversationsUpdate: 'conversations.update',
 } as const;
 export type MethodType = (typeof Method)[keyof typeof Method];
 
@@ -180,6 +185,7 @@ export const SERVICE_METHOD_CAPABILITIES = {
   [Method.ProfileSet]: Capability.SettingsManage,
   [Method.ProfileSetAvatar]: Capability.SettingsManage,
   [Method.ConversationsSetTyping]: Capability.TypingSend,
+  [Method.ConversationsUpdate]: Capability.ConversationsManage,
 } as const satisfies Partial<Record<MethodType, CapabilityType>>;
 export type ServiceMethodType = keyof typeof SERVICE_METHOD_CAPABILITIES;
 
@@ -996,6 +1002,48 @@ export type ConversationsSetTypingParamsType = z.infer<
   typeof conversationsSetTypingParamsSchema
 >;
 
+// Fork addition: Signal's chat menu actions (decision F15). Each is the
+// Redux action Signal's own menu dispatches, so it syncs the same way.
+// `mute.durationMs` null mutes always. Pinning past Signal's limit fails
+// with PRECONDITION_FAILED.
+const conversationChangeSchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('mute'),
+    durationMs: z
+      .number()
+      .int()
+      .min(60_000)
+      .max(366 * 24 * 60 * 60 * 1000)
+      .nullable(),
+  }),
+  z.object({ action: z.literal('unmute') }),
+  z.object({ action: z.literal('pin'), value: z.boolean() }),
+  z.object({ action: z.literal('archive'), value: z.boolean() }),
+  z.object({ action: z.literal('markUnread') }),
+  z.object({
+    action: z.literal('disappearingMessages'),
+    seconds: z
+      .number()
+      .int()
+      .min(0)
+      .max(366 * 24 * 60 * 60),
+  }),
+  z.object({ action: z.literal('block') }),
+  // Unblocking and accepting a message request are the same in Signal.
+  z.object({ action: z.literal('accept') }),
+  z.object({ action: z.literal('delete') }),
+]);
+
+export const conversationsUpdateParamsSchema = z
+  .object({
+    conversationId: conversationIdSchema,
+    change: conversationChangeSchema,
+  })
+  .strict();
+export type ConversationsUpdateParamsType = z.infer<
+  typeof conversationsUpdateParamsSchema
+>;
+
 export type TypistDTO = Readonly<{
   authorConversationId: string;
   author: AuthorDTO | null;
@@ -1071,6 +1119,7 @@ export const SERVICE_PARAM_SCHEMAS = {
   [Method.ProfileSet]: profileSetParamsSchema,
   [Method.ProfileSetAvatar]: profileSetAvatarParamsSchema,
   [Method.ConversationsSetTyping]: conversationsSetTypingParamsSchema,
+  [Method.ConversationsUpdate]: conversationsUpdateParamsSchema,
 } as const satisfies Record<ServiceMethodType, z.ZodType>;
 
 export type ConversationsListParamsType = z.infer<
@@ -1108,6 +1157,15 @@ export type ConversationDTO = Readonly<{
   // Fork addition: position among pinned chats (0 first), as Signal orders
   // them; null when not pinned.
   pinnedIndex: number | null;
+  // Fork addition (F15): when a mute ends, in ms since the epoch; a very
+  // large number for "always"; null when not muted.
+  mutedUntil: number | null;
+  // Fork addition (F15): the chat's disappearing messages timer in
+  // seconds; 0 when off.
+  disappearingSeconds: number;
+  // Fork addition (F15): false in groups where only admins may change the
+  // timer and we aren't one.
+  canChangeTimer: boolean;
 }>;
 
 export type LastMessageDTO = Readonly<{

@@ -23,6 +23,7 @@ import {
   pollsVoteParamsSchema,
   settingsSetParamsSchema,
   profileSetParamsSchema,
+  conversationsUpdateParamsSchema,
   profileSetAvatarParamsSchema,
   PROFILE_ABOUT_MAX_BYTES,
   MAX_PROFILE_AVATAR_BYTES,
@@ -314,6 +315,19 @@ describe('externalClient/protocol', () => {
           value: true,
         })
       );
+    });
+
+    it("takes Signal's chat menu actions only", () => {
+      const ok = (change: unknown) =>
+        accepts(conversationsUpdateParamsSchema, { conversationId, change });
+      assert.isTrue(ok({ action: 'mute', durationMs: 3_600_000 }));
+      assert.isTrue(ok({ action: 'mute', durationMs: null }));
+      assert.isTrue(ok({ action: 'pin', value: true }));
+      assert.isTrue(ok({ action: 'disappearingMessages', seconds: 0 }));
+      assert.isTrue(ok({ action: 'delete' }));
+      assert.isFalse(ok({ action: 'mute', durationMs: 5 }));
+      assert.isFalse(ok({ action: 'leaveGroup' }));
+      assert.isFalse(ok({ action: 'disappearingMessages', seconds: -1 }));
     });
 
     it('takes a sticker by pack and id', () => {

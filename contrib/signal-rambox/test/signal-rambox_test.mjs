@@ -204,6 +204,7 @@ describe('signal-rambox', () => {
     const req = bridge.calls.find(c => c.method === 'authorization.request');
     assert.deepEqual(req.params.capabilities.sort(), [
       'attachments.read',
+      'conversations.manage',
       'conversations.read',
       'messages.markRead',
       'messages.react',
@@ -690,6 +691,21 @@ describe('signal-rambox', () => {
     assert.equal(JSON.parse(changed.text).settings.readReceipts, false);
     const call = bridge.calls.findLast(c => c.method === 'settings.set');
     assert.deepEqual(call.params, { key: 'readReceipts', value: false });
+  });
+
+  it('passes chat menu changes on', async () => {
+    const change = { action: 'mute', durationMs: 3_600_000 };
+    const res = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/conversation`,
+      headers: json,
+      body: { conversationId: 'c1', change, extra: true },
+    });
+    assert.equal(res.status, 200);
+    const call = bridge.calls.findLast(
+      c => c.method === 'conversations.update'
+    );
+    assert.deepEqual(call.params, { conversationId: 'c1', change });
   });
 
   it('subscribes to typing and passes typing on', async () => {

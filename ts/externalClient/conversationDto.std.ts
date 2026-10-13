@@ -35,6 +35,8 @@ export type ConversationSourceType = Pick<
   | 'avatarHash'
   | 'color'
   | 'lastMessage'
+  | 'expireTimer'
+  | 'canChangeTimer'
 >;
 
 // A polynomial string hash, as hex. Turns internal values into an opaque
@@ -151,5 +153,10 @@ export function toConversationDTO(
     avatarVersion: getAvatarVersion(conversation),
     lastMessage: toLastMessage(conversation.lastMessage),
     pinnedIndex,
+    mutedUntil: isConversationMuted(conversation)
+      ? (conversation.muteExpiresAt ?? null)
+      : null,
+    disappearingSeconds: conversation.expireTimer ?? 0,
+    canChangeTimer: conversation.canChangeTimer ?? true,
   };
 }

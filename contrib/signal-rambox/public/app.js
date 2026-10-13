@@ -16,6 +16,8 @@ const authors = new Map();
 let capabilities = [];
 // conversationId -> [{ authorConversationId, author }], from typing.changed.
 const typingIn = new Map();
+// The chat list shows archived chats instead (Signal's "Archived chats").
+let showArchived = false;
 let selectedId = null;
 let messages = new Map();
 let nextCursor = null;
@@ -150,6 +152,15 @@ const ICONS = {
   poll: 'M5 20V11M12 20V4M19 20v-6',
   settings:
     'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z',
+  back: 'M15 5l-7 7 7 7',
+  bell: 'M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0',
+  check: 'M5 12.5l4.5 4.5L19 7.5',
+  timer: 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM12 9v4l2.5 2M10 2h4',
+  pin: 'M9 4h6l-1 6 4 3v2H6v-2l4-3zM12 15v6',
+  unpin: 'M9 4h6l-1 6 4 3v2H6v-2l4-3zM12 15v6M4 4l16 16',
+  unread: 'M4 6h11M4 12h9M4 18h11M19 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z',
+  archive: 'M4 5h16v4H4zM5 9v10h14V9M10 13h4',
+  block: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM5.6 5.6l12.8 12.8',
   sticker:
     'M20 12V8a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v8a4 4 0 0 0 4 4h4m8-8-8 8m8-8h-4a4 4 0 0 0-4 4v4',
   'cat-recent': 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3 2',
@@ -333,7 +344,7 @@ function sortedConversations() {
       query
         ? displayTitle(c).toLowerCase().includes(query) ||
           c.title.toLowerCase().includes(query)
-        : !c.archived
+        : c.archived === showArchived
     )
     .filter(keepConversation)
     .sort(
@@ -417,6 +428,19 @@ function conversationRow(c) {
     );
   }
   li.addEventListener('click', () => selectConversation(c.id));
+  // As Signal's chat list: right-click for the chat's menu.
+  li.addEventListener('contextmenu', ev => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    openChatMenu(c.id, {
+      left: ev.clientX,
+      right: ev.clientX,
+      top: ev.clientY,
+      bottom: ev.clientY,
+      width: 0,
+      height: 0,
+    });
+  });
   rowCache.set(c.id, { key, li });
   return li;
 }
@@ -505,8 +529,24 @@ function renderConversations() {
         ];
   if (rows.length === 0 && bridgeState === 'ready') {
     rows.push(
-      el('li', 'list-empty', unreadOnly ? 'No unread chats' : 'No chats')
+      el(
+        'li',
+        'list-empty',
+        showArchived
+          ? 'No archived chats'
+          : unreadOnly
+            ? 'No unread chats'
+            : 'No chats'
+      )
     );
+  }
+  if (showArchived) {
+    rows.unshift(archivedHead());
+  } else if (!searching) {
+    const archived = [...conversations.values()].filter(c => c.archived);
+    if (archived.length > 0) {
+      rows.push(archivedLink(archived.length));
+    }
   }
   $('conversations').replaceChildren(...rows);
 }
@@ -1404,6 +1444,319 @@ async function loadMessages({ older = false } = {}) {
   renderMessages({ keepBottom: !older });
 }
 
+// --- chat menu (Signal's header menu and the chat list's context menu) ---
+
+const MUTE_CHOICES = [
+  [60 * 60_000, 'Mute for one hour'],
+  [8 * 60 * 60_000, 'Mute for eight hours'],
+  [24 * 60 * 60_000, 'Mute for one day'],
+  [7 * 24 * 60 * 60_000, 'Mute for one week'],
+  [null, 'Mute always'],
+];
+
+const TIMER_CHOICES = [
+  [0, 'Off'],
+  [30, '30 seconds'],
+  [5 * 60, '5 minutes'],
+  [60 * 60, '1 hour'],
+  [8 * 60 * 60, '8 hours'],
+  [24 * 60 * 60, '1 day'],
+  [7 * 24 * 60 * 60, '1 week'],
+  [4 * 7 * 24 * 60 * 60, '4 weeks'],
+];
+
+function canManageChats() {
+  return capabilities.includes('conversations.manage');
+}
+
+async function changeConversation(conversationId, change) {
+  try {
+    await api('api/conversation', { conversationId, change });
+  } catch (error) {
+    toast(
+      change.action === 'pin' && error.code === 'PRECONDITION_FAILED'
+        ? 'You can only pin up to 4 chats.'
+        : `Not changed (${error.code ?? error.message}).`
+    );
+    return false;
+  }
+  return true;
+}
+
+function mutedUntilText(c) {
+  if (!c.mutedUntil) {
+    return null;
+  }
+  // Signal stores "always" as a far-off date.
+  if (c.mutedUntil > Date.now() + 10 * 365 * 24 * 3600_000) {
+    return 'Muted always';
+  }
+  const d = new Date(c.mutedUntil);
+  const sameDay = d.toDateString() === new Date().toDateString();
+  return `Muted until ${
+    sameDay
+      ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      : d.toLocaleString([], {
+          weekday: 'short',
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+  }`;
+}
+
+function timerLabel(seconds) {
+  const known = TIMER_CHOICES.find(([v]) => v === seconds);
+  if (known) {
+    return known[1];
+  }
+  if (seconds % 86400 === 0) {
+    return `${seconds / 86400} days`;
+  }
+  if (seconds % 3600 === 0) {
+    return `${seconds / 3600} hours`;
+  }
+  if (seconds % 60 === 0) {
+    return `${seconds / 60} minutes`;
+  }
+  return `${seconds} seconds`;
+}
+
+// page: null for the main menu, or 'mute' / 'timer'.
+function openChatMenu(conversationId, anchor, page = null) {
+  const c = conversations.get(conversationId);
+  if (!c) {
+    return;
+  }
+  closePopovers();
+  const menu = $('more-menu');
+  const items = [];
+  const add = (iconName, label, action, { keepOpen = false } = {}) => {
+    const item = el('button', 'menu-item');
+    item.type = 'button';
+    item.setAttribute('role', 'menuitem');
+    item.append(
+      iconName ? icon(iconName) : el('span', 'icon'),
+      el('span', '', label)
+    );
+    item.addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (!keepOpen) {
+        closePopovers();
+      }
+      action();
+    });
+    items.push(item);
+  };
+  const set = change => changeConversation(c.id, change);
+
+  if (!canManageChats()) {
+    items.push(
+      el(
+        'span',
+        'menu-empty',
+        'Allow this page to manage chats in Signal to use this menu.'
+      )
+    );
+  } else if (page === 'mute') {
+    add('back', 'Back', () => openChatMenu(conversationId, anchor), {
+      keepOpen: true,
+    });
+    items.push(el('div', 'menu-separator'));
+    if (c.muted) {
+      add('bell', 'Unmute', () => set({ action: 'unmute' }));
+    }
+    for (const [durationMs, label] of MUTE_CHOICES) {
+      add(null, label, () => set({ action: 'mute', durationMs }));
+    }
+  } else if (page === 'timer') {
+    add('back', 'Back', () => openChatMenu(conversationId, anchor), {
+      keepOpen: true,
+    });
+    items.push(el('div', 'menu-separator'));
+    const choices = TIMER_CHOICES.some(([v]) => v === c.disappearingSeconds)
+      ? TIMER_CHOICES
+      : [
+          ...TIMER_CHOICES,
+          [c.disappearingSeconds, timerLabel(c.disappearingSeconds)],
+        ];
+    for (const [seconds, label] of choices) {
+      add(seconds === c.disappearingSeconds ? 'check' : null, label, () =>
+        set({ action: 'disappearingMessages', seconds })
+      );
+    }
+  } else {
+    const blocked = c.blocked;
+    if (!blocked && !c.messageRequestPending) {
+      if (!c.noteToSelf && c.canChangeTimer) {
+        add(
+          'timer',
+          `Disappearing messages: ${timerLabel(c.disappearingSeconds)}`,
+          () => openChatMenu(conversationId, anchor, 'timer'),
+          { keepOpen: true }
+        );
+      }
+      add(
+        'bell',
+        c.muted ? (mutedUntilText(c) ?? 'Muted') : 'Mute notifications',
+        () => openChatMenu(conversationId, anchor, 'mute'),
+        { keepOpen: true }
+      );
+      if (!c.archived) {
+        add(
+          c.pinned ? 'unpin' : 'pin',
+          c.pinned ? 'Unpin chat' : 'Pin chat',
+          () => set({ action: 'pin', value: !c.pinned })
+        );
+      }
+      if (!isUnread(c)) {
+        add('unread', 'Mark as unread', () => {
+          set({ action: 'markUnread' });
+          if (c.id === selectedId) {
+            // Signal leaves the chat when you mark it unread.
+            closeConversation();
+          }
+        });
+      }
+      add('archive', c.archived ? 'Unarchive' : 'Archive', () => {
+        set({ action: 'archive', value: !c.archived });
+        if (!c.archived && c.id === selectedId) {
+          closeConversation();
+        }
+      });
+      items.push(el('div', 'menu-separator'));
+    }
+    if (c.messageRequestPending && !blocked) {
+      add('check', 'Accept', () => set({ action: 'accept' }));
+    }
+    if (!c.noteToSelf) {
+      add('block', blocked ? 'Unblock' : 'Block', () =>
+        confirmBlock(c, !blocked)
+      );
+    }
+    add('trash', 'Delete chat', () => confirmDelete(c));
+  }
+  menu.replaceChildren(...items);
+  placePopover(menu, anchor);
+}
+
+function confirmBlock(c, block) {
+  const group = c.type === 'group';
+  const text = block
+    ? group
+      ? `Block and leave ${displayTitle(c)}? You will no longer receive messages or updates from this group and members won't be able to add you to this group again.`
+      : `Block ${displayTitle(c)}? Blocked people won't be able to call you or send you messages.`
+    : group
+      ? `Unblock ${displayTitle(c)}? Group members will be able to add you to this group again.`
+      : `Unblock ${displayTitle(c)}? You will be able to message and call each other.`;
+  if (confirm(text)) {
+    changeConversation(c.id, { action: block ? 'block' : 'accept' });
+  }
+}
+
+function confirmDelete(c) {
+  const text =
+    c.type === 'group'
+      ? 'Delete chat? All messages in this chat will be deleted from all your devices. You will still be a member of this group.'
+      : 'Delete chat? All messages in this chat will be deleted from all your devices.';
+  if (!confirm(text)) {
+    return;
+  }
+  changeConversation(c.id, { action: 'delete' }).then(ok => {
+    if (ok && c.id === selectedId) {
+      closeConversation();
+    }
+  });
+}
+
+// Back to no chat open, as Signal after archiving or deleting one.
+function closeConversation() {
+  selectedId = null;
+  messages = new Map();
+  nextCursor = null;
+  closePopovers();
+  cancelReply();
+  $('chat-head').hidden = true;
+  $('messages').hidden = true;
+  $('composer').hidden = true;
+  $('request-bar').hidden = true;
+  $('empty').hidden = false;
+  $('message-list').replaceChildren();
+  renderConversations();
+  renderTitle();
+}
+
+// Signal's bar under a message request or blocked chat.
+function renderRequestBar() {
+  const bar = $('request-bar');
+  const c = conversations.get(selectedId);
+  if (!c || c.noteToSelf || !(c.blocked || c.messageRequestPending)) {
+    bar.hidden = true;
+    $('composer').hidden = !c;
+    return;
+  }
+  // As Signal: the bar replaces the composer until the request is answered.
+  $('composer').hidden = true;
+  const button = (label, cls, action) => {
+    const b = el('button', `request-button ${cls}`, label);
+    b.type = 'button';
+    b.disabled = !canManageChats();
+    b.addEventListener('click', action);
+    return b;
+  };
+  const text = c.blocked
+    ? c.type === 'group'
+      ? 'You blocked this group.'
+      : `You blocked ${displayTitle(c)}.`
+    : c.type === 'group'
+      ? `Do you want to join this group? They won't know you've seen their messages until you accept.`
+      : `Let ${displayTitle(c)} message you and share your name and photo with them? They won't know you've seen their messages until you accept.`;
+  const actions = el('div', 'request-actions');
+  if (c.blocked) {
+    actions.append(
+      button('Delete', '', () => confirmDelete(c)),
+      button('Unblock', 'primary', () => confirmBlock(c, false))
+    );
+  } else {
+    actions.append(
+      button('Block', '', () => confirmBlock(c, true)),
+      button('Delete', '', () => confirmDelete(c)),
+      button('Accept', 'primary', () =>
+        changeConversation(c.id, { action: 'accept' })
+      )
+    );
+  }
+  bar.replaceChildren(el('p', 'request-text', text), actions);
+  bar.hidden = false;
+}
+
+function archivedHead() {
+  const li = el('li', 'archived-head');
+  const back = el('button', 'icon-button', '');
+  back.type = 'button';
+  back.title = 'Back';
+  back.setAttribute('aria-label', 'Back');
+  back.append(icon('back'));
+  back.addEventListener('click', () => {
+    showArchived = false;
+    renderConversations();
+  });
+  li.append(back, el('span', '', 'Archived chats'));
+  return li;
+}
+
+function archivedLink(count) {
+  const li = el('li', 'archived-link');
+  const b = el('button', '', `Archived chats (${count})`);
+  b.type = 'button';
+  b.addEventListener('click', () => {
+    showArchived = true;
+    renderConversations();
+    $('conversations').scrollTop = 0;
+  });
+  li.append(b);
+  return li;
+}
+
 function renderChatHeader() {
   const c = conversations.get(selectedId);
   $('chat-title').textContent = c ? displayTitle(c) : '';
@@ -1413,9 +1766,13 @@ function renderChatHeader() {
     sub.push(`${c.memberCount} members`);
   }
   if (c?.muted) {
-    sub.push('muted');
+    sub.push(mutedUntilText(c)?.toLowerCase() ?? 'muted');
+  }
+  if (c?.disappearingSeconds) {
+    sub.push(`disappearing: ${timerLabel(c.disappearingSeconds)}`);
   }
   $('chat-sub').textContent = sub.join(' · ');
+  renderRequestBar();
 }
 
 async function selectConversation(id) {
@@ -4052,6 +4409,13 @@ $('compose').addEventListener('paste', e => {
 });
 $('settings-open').append(icon('settings'));
 $('settings-open').addEventListener('click', openSettings);
+$('chat-menu-open').append(icon('more'));
+$('chat-menu-open').addEventListener('click', ev => {
+  ev.stopPropagation();
+  if (selectedId) {
+    openChatMenu(selectedId, $('chat-menu-open'));
+  }
+});
 $('settings-close').append(icon('close'));
 $('settings-close').addEventListener('click', closeSettings);
 $('settings').addEventListener('click', e => {

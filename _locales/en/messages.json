@@ -4578,6 +4578,10 @@
     "messageformat": "Show others when you are typing, following your typing indicators setting",
     "description": "Permission shown in the local app access dialog"
   },
+  "icu:ExternalClientCapability__conversations-manage": {
+    "messageformat": "Pin, archive, mute, block, accept and delete chats, and set their disappearing messages timer",
+    "description": "Permission shown in the local app access dialog"
+  },
   "icu:ExternalClientCapability__settings-manage": {
     "messageformat": "See and change your Signal settings, including privacy settings that apply to all your devices",
     "description": "Permission shown in the local app access dialog"

@@ -428,6 +428,8 @@ function getCapabilityLabel(
       return i18n('icu:ExternalClientCapability__notifications-manage');
     case Capability.SettingsManage:
       return i18n('icu:ExternalClientCapability__settings-manage');
+    case Capability.ConversationsManage:
+      return i18n('icu:ExternalClientCapability__conversations-manage');
     case Capability.TypingRead:
       return i18n('icu:ExternalClientCapability__typing-read');
     case Capability.TypingSend:
