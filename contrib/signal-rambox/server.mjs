@@ -536,6 +536,19 @@ export function createWebServer({
       );
       return;
     }
+    if (req.method === 'GET' && route === 'api/search') {
+      const query = url.searchParams.get('q') ?? '';
+      const conversationId = url.searchParams.get('conversationId');
+      sendJson(
+        res,
+        200,
+        await bridge.call('messages.search', {
+          query,
+          ...(conversationId ? { conversationId } : {}),
+        })
+      );
+      return;
+    }
     if (req.method === 'POST' && route === 'api/conversation') {
       const { conversationId, change } = await readJson(req);
       sendJson(
@@ -608,10 +621,12 @@ export function createWebServer({
     if (req.method === 'GET' && route === 'api/messages') {
       const conversationId = url.searchParams.get('conversationId');
       const cursor = url.searchParams.get('cursor') ?? undefined;
+      const newer = url.searchParams.get('newer') === '1';
       const result = await bridge.call('messages.list', {
         conversationId,
         limit: 50,
         ...(cursor ? { cursor } : {}),
+        ...(cursor && newer ? { newer: true } : {}),
       });
       sendJson(res, 200, result);
       return;

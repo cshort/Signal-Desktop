@@ -38,6 +38,7 @@ import {
 } from './ExternalClientOutgoing.preload.ts';
 import { updateConversation } from './ExternalClientChats.preload.ts';
 import { getDetails } from './ExternalClientDetails.preload.ts';
+import { searchMessages } from './ExternalClientSearch.preload.ts';
 import { getMembers } from './ExternalClientMentions.preload.ts';
 import {
   getProfile,
@@ -146,6 +147,7 @@ async function listMessages({
   conversationId,
   limit = LIMITS.defaultMessagePage,
   cursor,
+  newer = false,
 }: MessagesListParamsType): Promise<ServiceResultType> {
   if (!window.ConversationController.isInitialFetchComplete()) {
     return notReady;
@@ -163,9 +165,9 @@ async function listMessages({
     }
   }
 
-  // Same query the timeline uses to load older messages. Results are
-  // oldest first.
-  const page = await DataReader.getOlderMessagesByConversation({
+  // Same queries the timeline uses to load older and newer messages.
+  // Results are oldest first.
+  const query = {
     conversationId,
     includeStoryReplies: !isGroup(model.attributes),
     limit,
@@ -173,7 +175,10 @@ async function listMessages({
     receivedAt: anchor?.received_at,
     sentAt: anchor?.sent_at,
     storyId: undefined,
-  });
+  };
+  const page = newer
+    ? await DataReader.getNewerMessagesByConversation(query)
+    : await DataReader.getOlderMessagesByConversation(query);
 
   const context = getDtoContext();
   const messages = new Array<MessageDTO>();
@@ -184,12 +189,13 @@ async function listMessages({
     }
   }
 
-  // The cursor is the oldest row read, even if it was filtered out, so the
-  // next page continues where this one stopped.
-  const oldest = page.at(0);
+  // The cursor is the last row read (the oldest, or the newest when paging
+  // forward), even if it was filtered out, so the next page continues where
+  // this one stopped.
+  const last = newer ? page.at(-1) : page.at(0);
   const value: MessagesListResultType = {
     messages,
-    nextCursor: page.length === limit && oldest ? oldest.id : null,
+    nextCursor: page.length === limit && last ? last.id : null,
   };
   return { ok: true, value };
 }
@@ -395,6 +401,13 @@ async function dispatch(
       }
       const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
       return params.success ? getDetails(params.data) : invalid;
+    }
+    case Method.MessagesSearch: {
+      if (!window.ConversationController.isInitialFetchComplete()) {
+        return notReady;
+      }
+      const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
+      return params.success ? searchMessages(params.data) : invalid;
     }
     case Method.ConversationsUpdate: {
       if (!window.ConversationController.isInitialFetchComplete()) {

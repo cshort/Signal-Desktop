@@ -21,7 +21,7 @@
             <input
               id="search"
               type="search"
-              placeholder="Search chats"
+              placeholder="Search"
               autocomplete="off"
               spellcheck="false"
             />
@@ -48,6 +48,7 @@
               aria-label="Settings"
             ></button>
           </div>
+          <div class="search-scope" id="search-scope" hidden></div>
           <div class="filters" id="filters" role="toolbar"></div>
         </div>
         <ul id="conversations" class="conversations" role="listbox"></ul>
@@ -74,6 +75,14 @@
             Load older messages
           </button>
           <ol id="message-list"></ol>
+          <div class="newer" id="newer" hidden>
+            <button id="newer-load" class="older" type="button">
+              Load newer messages
+            </button>
+            <button id="latest" class="older" type="button">
+              Go to the newest
+            </button>
+          </div>
           <div id="typing" class="typing" hidden></div>
         </div>
         <div class="send-error" id="send-error" hidden></div>

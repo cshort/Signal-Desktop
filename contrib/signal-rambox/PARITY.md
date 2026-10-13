@@ -23,7 +23,7 @@ Last reviewed: 2026-10-13, against the Signal release in fork main.
 | Filter chats by name                                 | done    |        |
 | Archived chats view                                  | done    | F15    |
 | Pin, unpin, archive, mute, mark unread from the list | done    | F15    |
-| Search messages across chats                         | missing |        |
+| Search messages across chats                         | done    | F17    |
 | New chat, find by username or number                 | missing |        |
 | New group                                            | missing |        |
 | Message requests (accept, block, delete)             | done    | F15    |
@@ -52,7 +52,7 @@ Last reviewed: 2026-10-13, against the Signal release in fork main.
 | Chat header: details, members, safety number             | partial | F16: details and members; safety number missing      |
 | Per-chat settings: timer, mute, block, colors, nickname  | partial | F15: timer, mute, block; colors and nickname missing |
 | Media, files and links gallery                           | missing |                                                      |
-| Search inside a chat                                     | missing |                                                      |
+| Search inside a chat                                     | done    | F17                                                  |
 | Group management (add/remove, admins, link, name, photo) | missing |                                                      |
 | Poll-ended and other system notices                      | partial |                                                      |
 | Stories (view, post, reply)                              | missing |                                                      |

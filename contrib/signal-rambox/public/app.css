@@ -2960,3 +2960,62 @@ label.poll-option {
 #more-menu {
   z-index: 32;
 }
+
+/* Message search, as Signal's: results under the matching chats, the
+   matched words in bold. */
+.conversations .search-result {
+  align-items: flex-start;
+}
+
+.conversations .snippet {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.f-highlight {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.search-scope {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 2px 4px 2px 12px;
+  border-radius: 16px;
+  background: var(--hover);
+  font-size: 13px;
+}
+
+.search-scope span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* After jumping to an older message. */
+.newer {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.newer .older {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .sidebar:not(.expanded) .search-scope {
+    display: none;
+  }
+}

@@ -24,6 +24,8 @@ export const LIMITS = {
   maxConversationPage: 500,
   defaultConversationPage: 100,
   maxMessagePage: 100,
+  // Fork addition: Signal's own search returns at most 500.
+  maxSearchResults: 500,
   defaultMessagePage: 50,
   // Events stop (with `events.dropped`) once this many bytes are waiting to
   // be written to a client.
@@ -150,6 +152,7 @@ export const Method = {
   ConversationsSetTyping: 'conversations.setTyping',
   ConversationsUpdate: 'conversations.update',
   ConversationsGetDetails: 'conversations.getDetails',
+  MessagesSearch: 'messages.search',
 } as const;
 export type MethodType = (typeof Method)[keyof typeof Method];
 
@@ -189,6 +192,7 @@ export const SERVICE_METHOD_CAPABILITIES = {
   [Method.ConversationsSetTyping]: Capability.TypingSend,
   [Method.ConversationsUpdate]: Capability.ConversationsManage,
   [Method.ConversationsGetDetails]: Capability.ContactsRead,
+  [Method.MessagesSearch]: Capability.MessagesRead,
 } as const satisfies Partial<Record<MethodType, CapabilityType>>;
 export type ServiceMethodType = keyof typeof SERVICE_METHOD_CAPABILITIES;
 
@@ -393,8 +397,13 @@ export const messagesListParamsSchema = z
     limit: z.number().int().min(1).max(LIMITS.maxMessagePage).optional(),
     // Opaque to clients: pass back `nextCursor` to page further back.
     cursor: messageIdSchema.optional(),
+    // Fork addition (decision F17): page forward from `cursor` instead,
+    // to fill in after jumping to a search result. Needs a cursor, which
+    // may also be a message id from messages.search.
+    newer: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .refine(params => !params.newer || params.cursor !== undefined);
 
 export const messagesGetParamsSchema = z
   .object({
@@ -1097,6 +1106,37 @@ export type ConversationsGetDetailsResultType = Readonly<{
   details: ConversationDetailsDTO;
 }>;
 
+// Fork addition: Signal's message search (decision F17), the same full-text
+// query as Signal's search box, across all chats or in one.
+export const messagesSearchParamsSchema = z
+  .object({
+    query: z
+      .string()
+      .max(200)
+      .refine(query => query.trim().length > 0),
+    conversationId: conversationIdSchema.optional(),
+    limit: z.number().int().min(1).max(LIMITS.maxSearchResults).optional(),
+  })
+  .strict();
+export type MessagesSearchParamsType = z.infer<
+  typeof messagesSearchParamsSchema
+>;
+
+export type TextRangeDTO = Readonly<{ start: number; length: number }>;
+
+export type SearchResultDTO = Readonly<{
+  message: MessageDTO;
+  // The part of `message.body` Signal shows as the snippet, and the matched
+  // words in it, in `body` positions. Null when it can't be placed.
+  snippet: TextRangeDTO | null;
+  highlights: ReadonlyArray<TextRangeDTO>;
+}>;
+
+export type MessagesSearchResultType = Readonly<{
+  // Newest first, as Signal lists them.
+  results: ReadonlyArray<SearchResultDTO>;
+}>;
+
 export type TypistDTO = Readonly<{
   authorConversationId: string;
   author: AuthorDTO | null;
@@ -1174,6 +1214,7 @@ export const SERVICE_PARAM_SCHEMAS = {
   [Method.ConversationsSetTyping]: conversationsSetTypingParamsSchema,
   [Method.ConversationsUpdate]: conversationsUpdateParamsSchema,
   [Method.ConversationsGetDetails]: conversationsGetDetailsParamsSchema,
+  [Method.MessagesSearch]: messagesSearchParamsSchema,
 } as const satisfies Record<ServiceMethodType, z.ZodType>;
 
 export type ConversationsListParamsType = z.infer<

@@ -563,3 +563,24 @@ button that opens the chat menu over it.
 
 WHY: The third gap on Mike's standing parity rule (2026-10-13). Safety
 numbers and group changes come later.
+
+## F17. Fork only: message search
+
+DECISION: `messages.search {query, conversationId?, limit?}` (needs
+`messages.read`, no new approval) runs the same search as Signal's search
+box: the full-text query, plus messages mentioning contacts whose names
+match, across all chats or in one, newest first, up to Signal's own limits
+(500, or 100 in one chat). Each result is the message as `messages.list`
+gives it, with Signal's snippet and the matched words as ranges of its
+body, so clients show them with the message's own mentions and styles.
+`messages.list` gains `newer: true`, which pages forward from the cursor,
+so a client can open a chat at an older message and fill in toward the
+newest.
+
+The page searches messages as you type in the search box, listing them
+under the matching chats as Signal does ("Alice in Family", the snippet
+with the match in bold). A result opens its chat at that message, with the
+messages around it; scrolling down loads newer ones, and sending goes back
+to the newest. The chat menu has "Search in chat".
+
+WHY: The fourth gap on Mike's standing parity rule (2026-10-13).

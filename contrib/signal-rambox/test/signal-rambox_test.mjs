@@ -703,6 +703,29 @@ describe('signal-rambox', () => {
     assert.equal(JSON.parse(res.text).details.title, 'Lydia');
   });
 
+  it('searches messages, in all chats or one', async () => {
+    const res = await http(port, {
+      path: `/${helper.token}/api/search?q=hello&conversationId=c1`,
+    });
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(JSON.parse(res.text).results));
+    const call = bridge.calls.findLast(c => c.method === 'messages.search');
+    assert.deepEqual(call.params, { query: 'hello', conversationId: 'c1' });
+  });
+
+  it('pages newer messages only after a cursor', async () => {
+    await http(port, {
+      path: `/${helper.token}/api/messages?conversationId=c1&newer=1`,
+    });
+    let call = bridge.calls.findLast(c => c.method === 'messages.list');
+    assert.equal(call.params.newer, undefined);
+    await http(port, {
+      path: `/${helper.token}/api/messages?conversationId=c1&cursor=m1&newer=1`,
+    });
+    call = bridge.calls.findLast(c => c.method === 'messages.list');
+    assert.equal(call.params.newer, true);
+  });
+
   it('passes chat menu changes on', async () => {
     const change = { action: 'mute', durationMs: 3_600_000 };
     const res = await http(port, {

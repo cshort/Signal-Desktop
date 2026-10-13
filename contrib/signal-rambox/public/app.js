@@ -21,6 +21,10 @@ let showArchived = false;
 let selectedId = null;
 let messages = new Map();
 let nextCursor = null;
+// Set after jumping to an older message (a search result): the newest
+// messages aren't loaded, and this pages toward them.
+let newerCursor = null;
+let loadingNewer = false;
 let bridgeState = 'offline';
 let helperConnected = false;
 let markReadInFlight = false;
@@ -514,12 +518,18 @@ function renderFilters() {
 
 function renderConversations() {
   renderFilters();
-  const list = sortedConversations();
   const searching = $('search').value.trim() !== '';
+  // Searching in one chat finds only its messages, as in Signal.
+  const list = searching && searchScope ? [] : sortedConversations();
   const pinned = list.filter(c => c.pinned);
   const others = list.filter(c => !c.pinned);
-  const rows =
-    searching || pinned.length === 0
+  const rows = searching
+    ? [
+        ...(list.length > 0 ? [sectionHead('Chats')] : []),
+        ...list.map(conversationRow),
+        ...searchRows(list.length),
+      ]
+    : pinned.length === 0
       ? list.map(conversationRow)
       : [
           sectionHead('Pinned'),
@@ -549,6 +559,241 @@ function renderConversations() {
     }
   }
   $('conversations').replaceChildren(...rows);
+}
+
+// --- message search (Signal's search box) -----------------------------------
+
+// Searching in one chat (from its menu), or null for all chats.
+let searchScope = null;
+// The last answer: { query, scope, results } or { ..., error }.
+let searchAnswer = null;
+let searchTimer = null;
+let searchSeq = 0;
+
+function currentSearch() {
+  return { query: $('search').value.trim(), scope: searchScope };
+}
+
+function scheduleSearch() {
+  clearTimeout(searchTimer);
+  const { query } = currentSearch();
+  if (!query) {
+    searchAnswer = null;
+    return;
+  }
+  searchTimer = setTimeout(runSearch, 250);
+}
+
+async function runSearch() {
+  const { query, scope } = currentSearch();
+  if (!query) {
+    return;
+  }
+  const seq = ++searchSeq;
+  const params = new URLSearchParams({ q: query });
+  if (scope) {
+    params.set('conversationId', scope);
+  }
+  let answer;
+  try {
+    const { results } = await api(`api/search?${params}`);
+    answer = { query, scope, results };
+  } catch (error) {
+    answer = { query, scope, results: [], error };
+  }
+  if (seq === searchSeq) {
+    searchAnswer = answer;
+    renderConversations();
+  }
+}
+
+function searchRows(chatCount) {
+  const { query, scope } = currentSearch();
+  const answer =
+    searchAnswer?.query === query && searchAnswer.scope === scope
+      ? searchAnswer
+      : null;
+  if (!answer) {
+    return [sectionHead('Messages'), el('li', 'list-empty', 'Searching…')];
+  }
+  if (answer.error) {
+    return [
+      sectionHead('Messages'),
+      el(
+        'li',
+        'list-empty',
+        `Couldn't search (${answer.error.code ?? answer.error.message}).`
+      ),
+    ];
+  }
+  if (answer.results.length === 0) {
+    return chatCount > 0
+      ? []
+      : [el('li', 'list-empty', `No results for "${query}"`)];
+  }
+  return [sectionHead('Messages'), ...answer.results.map(searchResultRow)];
+}
+
+// The snippet as Signal shows it: the matched part of the body, with the
+// message's own mentions and styles and the matched words in bold.
+function renderSnippet(result) {
+  const { message, snippet, highlights } = result;
+  const body = message.body ?? '';
+  const start = snippet?.start ?? 0;
+  const end = snippet ? start + snippet.length : body.length;
+  const shift = ranges =>
+    (ranges ?? []).flatMap(r => {
+      const from = Math.max(start, r.start);
+      const to = Math.min(end, r.start + r.length);
+      return to > from
+        ? [{ ...r, start: from - start, length: to - from }]
+        : [];
+    });
+  const part = renderBody({
+    body: body.slice(start, end),
+    mentions: shift(message.mentions),
+    formatting: [
+      ...shift(message.formatting),
+      ...shift(highlights.map(r => ({ ...r, style: 'highlight' }))),
+    ],
+  });
+  part.classList.add('snippet');
+  if (start > 0) {
+    part.prepend('…');
+  }
+  if (end < body.length) {
+    part.append('…');
+  }
+  return part;
+}
+
+function searchResultRow(result) {
+  const m = result.message;
+  const c = conversations.get(m.conversationId);
+  const li = el('li', 'search-result');
+  li.setAttribute('role', 'option');
+  const from =
+    m.direction === 'outgoing'
+      ? 'You'
+      : (m.author?.title ?? nameOf(m.authorConversationId));
+  const where = c ? displayTitle(c) : 'Unknown chat';
+  const title =
+    c?.type === 'group'
+      ? `${from} in ${where}`
+      : m.direction === 'outgoing' && !c?.noteToSelf
+        ? `You to ${where}`
+        : where;
+  const text = el('span', 'row-text');
+  const top = el('span', 'row-top');
+  top.append(
+    el('span', 'title', title),
+    el('span', 'time', shortTime(m.sentAt))
+  );
+  text.append(top, renderSnippet(result));
+  li.title = title;
+  li.append(c ? conversationAvatar(c, 48) : el('span', 'avatar'), text);
+  li.addEventListener('click', () => jumpToMessage(m));
+  return li;
+}
+
+function renderSearchScope() {
+  const box = $('search-scope');
+  const c = searchScope ? conversations.get(searchScope) : null;
+  box.hidden = !c;
+  $('search').placeholder = c ? 'Search messages in this chat' : 'Search';
+  if (!c) {
+    box.replaceChildren();
+    return;
+  }
+  const close = el('button', 'icon-button');
+  close.type = 'button';
+  close.title = 'Search all chats';
+  close.setAttribute('aria-label', 'Search all chats');
+  close.append(icon('close'));
+  close.addEventListener('click', () => endChatSearch());
+  box.replaceChildren(el('span', '', `In ${displayTitle(c)}`), close);
+}
+
+// As Signal's "Search in chat".
+function startChatSearch(conversationId) {
+  searchScope = conversationId;
+  $('search').value = '';
+  searchAnswer = null;
+  renderSearchScope();
+  document.querySelector('.sidebar').classList.add('expanded');
+  $('search').focus();
+  renderConversations();
+}
+
+function endChatSearch() {
+  searchScope = null;
+  renderSearchScope();
+  scheduleSearch();
+  renderConversations();
+}
+
+// Opens a search result's chat at that message, loading the messages
+// around it, as Signal does.
+async function jumpToMessage(target) {
+  collapseSidebar();
+  if (selectedId !== target.conversationId) {
+    await selectConversation(target.conversationId);
+  }
+  if (selectedId !== target.conversationId) {
+    return;
+  }
+  if (!messages.has(target.id)) {
+    const conversationId = selectedId;
+    const older = new URLSearchParams({ conversationId, cursor: target.id });
+    const newer = new URLSearchParams({
+      conversationId,
+      cursor: target.id,
+      newer: '1',
+    });
+    let pages;
+    try {
+      pages = await Promise.all([
+        api(`api/messages?${older}`),
+        api(`api/messages?${newer}`),
+      ]);
+    } catch (error) {
+      toast(`Couldn't load messages (${error.code ?? error.message}).`);
+      return;
+    }
+    if (conversationId !== selectedId) {
+      return;
+    }
+    messages = new Map();
+    clearExpiryTimers();
+    putMessage(target);
+    for (const m of [...pages[0].messages, ...pages[1].messages]) {
+      putMessage(m);
+    }
+    nextCursor = pages[0].nextCursor;
+    newerCursor = pages[1].nextCursor;
+    renderMessages({ keepBottom: false });
+  }
+  flashMessage(target.id);
+  maybeMarkRead();
+}
+
+// Back to the newest messages after a jump, as Signal's scroll-down button.
+async function showLatest() {
+  const conversationId = selectedId;
+  messages = new Map();
+  clearExpiryTimers();
+  nextCursor = null;
+  newerCursor = null;
+  try {
+    await loadMessages();
+  } catch (error) {
+    toast(`Couldn't load messages (${error.code ?? error.message}).`);
+    return;
+  }
+  if (conversationId === selectedId) {
+    $('messages').scrollTop = $('messages').scrollHeight;
+    maybeMarkRead();
+  }
 }
 
 // --- messages --------------------------------------------------------------
@@ -692,12 +937,18 @@ async function jumpToQuote(quote) {
     }
     found = findQuoted(quote);
   }
-  const li =
-    found &&
-    $('message-list').querySelector(`[data-id="${CSS.escape(found.id)}"]`);
-  if (!li) {
+  if (!found || !flashMessage(found.id)) {
     toast('Original message not found.');
-    return;
+  }
+}
+
+// Scrolls a loaded message into view and highlights it briefly.
+function flashMessage(messageId) {
+  const li = $('message-list').querySelector(
+    `[data-id="${CSS.escape(messageId)}"]`
+  );
+  if (!li) {
+    return false;
   }
   li.scrollIntoView({ block: 'center', behavior: 'smooth' });
   li.classList.remove('flash');
@@ -705,6 +956,7 @@ async function jumpToQuote(quote) {
   void li.offsetWidth;
   li.classList.add('flash');
   setTimeout(() => li.classList.remove('flash'), 1600);
+  return true;
 }
 
 function renderQuote(quote) {
@@ -1137,6 +1389,8 @@ const STYLE_CLASS = {
   strikethrough: 'f-strike',
   monospace: 'f-mono',
   spoiler: 'f-spoiler',
+  // Search matches, in snippets.
+  highlight: 'f-highlight',
 };
 
 // Splits the body at every range edge and styles each piece, as Signal's
@@ -1368,7 +1622,7 @@ function patchChildren(parent, wanted) {
   }
 }
 
-function renderMessages({ keepBottom = true } = {}) {
+function renderMessages({ keepBottom = true, appended = false } = {}) {
   const box = $('messages');
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
   const previousHeight = box.scrollHeight;
@@ -1383,7 +1637,10 @@ function renderMessages({ keepBottom = true } = {}) {
     }
   }
   $('older').hidden = !nextCursor;
-  if (keepBottom && atBottom) {
+  $('newer').hidden = newerCursor === null;
+  if (appended) {
+    // Newer messages went in below; the view stays where it is.
+  } else if (keepBottom && atBottom) {
     box.scrollTop = box.scrollHeight;
   } else if (!keepBottom) {
     // Loading older messages: keep the same message in view.
@@ -1425,6 +1682,38 @@ function clearExpiryTimers() {
     clearTimeout(timer);
   }
   expiryTimers.clear();
+}
+
+async function loadNewer() {
+  const conversationId = selectedId;
+  if (newerCursor === null || loadingNewer) {
+    return;
+  }
+  loadingNewer = true;
+  let page;
+  try {
+    page = await api(
+      `api/messages?${new URLSearchParams({
+        conversationId,
+        cursor: newerCursor,
+        newer: '1',
+      })}`
+    );
+  } catch (error) {
+    toast(`Couldn't load newer messages (${error.code ?? error.message}).`);
+    return;
+  } finally {
+    loadingNewer = false;
+  }
+  if (conversationId !== selectedId) {
+    return;
+  }
+  for (const m of page.messages) {
+    putMessage(m);
+  }
+  newerCursor = page.nextCursor;
+  renderMessages({ appended: true });
+  maybeMarkRead();
 }
 
 async function loadMessages({ older = false } = {}) {
@@ -1590,6 +1879,7 @@ function openChatMenu(conversationId, anchor, page = null) {
       add('note', c.type === 'group' ? 'Group details' : 'About', () =>
         openDetails(c.id)
       );
+      add('search', 'Search in chat', () => startChatSearch(c.id));
       items.push(el('div', 'menu-separator'));
     }
     if (!blocked && !c.messageRequestPending) {
@@ -1679,6 +1969,7 @@ function closeConversation() {
   selectedId = null;
   messages = new Map();
   nextCursor = null;
+  newerCursor = null;
   closePopovers();
   cancelReply();
   $('chat-head').hidden = true;
@@ -1967,6 +2258,7 @@ async function selectConversation(id) {
   selectedId = id;
   messages = new Map();
   nextCursor = null;
+  newerCursor = null;
   collapseSidebar();
   renderDrafts();
   clearExpiryTimers();
@@ -2002,6 +2294,8 @@ async function maybeMarkRead() {
   }
   if (
     !c ||
+    // After a jump, until the newest messages are loaded.
+    newerCursor !== null ||
     document.visibilityState !== 'visible' ||
     !document.hasFocus() ||
     !(c.unreadCount > 0 || c.markedUnread)
@@ -3519,7 +3813,8 @@ function connectEvents() {
   });
   on('message.added', m => {
     rememberAuthors(m);
-    if (m.conversationId === selectedId) {
+    // After a jump, it arrives when paging reaches the newest.
+    if (m.conversationId === selectedId && newerCursor === null) {
       putMessage(m);
       renderMessages();
       maybeMarkRead();
@@ -3585,6 +3880,10 @@ async function sendCurrent() {
   };
   $('send').disabled = true;
   $('send-error').hidden = true;
+  // As Signal: sending goes back to the newest messages.
+  if (newerCursor !== null) {
+    await showLatest();
+  }
   try {
     if (editing) {
       await api('api/edit', { messageId: editing.id, body, ...withMentions });
@@ -5149,7 +5448,17 @@ $('compose').addEventListener('keydown', e => {
   }
 });
 $('older').addEventListener('click', () => loadMessages({ older: true }));
-$('search').addEventListener('input', renderConversations);
+$('newer-load').addEventListener('click', loadNewer);
+$('latest').addEventListener('click', showLatest);
+$('search').addEventListener('input', () => {
+  scheduleSearch();
+  renderConversations();
+});
+$('search').addEventListener('keydown', e => {
+  if (e.key === 'Escape' && searchScope && $('search').value === '') {
+    endChatSearch();
+  }
+});
 $('filter-unread').append(icon('filter'));
 $('filter-unread').addEventListener('click', () =>
   setListFilter(listFilter, !unreadOnly)
@@ -5194,7 +5503,11 @@ $('messages').addEventListener(
   () => {
     const box = $('messages');
     if (box.scrollHeight - box.scrollTop - box.clientHeight < 80) {
-      maybeMarkRead();
+      if (newerCursor === null) {
+        maybeMarkRead();
+      } else {
+        loadNewer();
+      }
     }
   },
   { passive: true }

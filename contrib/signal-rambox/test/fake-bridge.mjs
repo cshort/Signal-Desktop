@@ -389,6 +389,15 @@ export class FakeBridge {
         }
         // Newest first, a page at a time; the cursor is the oldest so far.
         const sorted = [...all].sort((a, b) => a.sentAt - b.sentAt);
+        if (params.newer) {
+          const from = sorted.findIndex(m => m.id === params.cursor) + 1;
+          const to = Math.min(sorted.length, from + this.pageSize);
+          this.#reply(session, id, {
+            messages: sorted.slice(from, to),
+            nextCursor: to < sorted.length ? sorted[to - 1].id : null,
+          });
+          return;
+        }
         const end = params.cursor
           ? sorted.findIndex(m => m.id === params.cursor)
           : sorted.length;
@@ -397,6 +406,35 @@ export class FakeBridge {
           messages: sorted.slice(start, end),
           nextCursor: start > 0 ? sorted[start].id : null,
         });
+        return;
+      }
+      case 'messages.search': {
+        // Substring match, newest first, like Signal's full-text search.
+        const needle = params.query.toLowerCase();
+        const results = [];
+        for (const [conversationId, list] of this.messages) {
+          if (
+            params.conversationId &&
+            conversationId !== params.conversationId
+          ) {
+            continue;
+          }
+          for (const message of list) {
+            const at = message.body?.toLowerCase().indexOf(needle) ?? -1;
+            if (at === -1) {
+              continue;
+            }
+            const start = Math.max(0, at - 20);
+            const end = Math.min(message.body.length, at + needle.length + 20);
+            results.push({
+              message,
+              snippet: { start, length: end - start },
+              highlights: [{ start: at, length: needle.length }],
+            });
+          }
+        }
+        results.sort((a, b) => b.message.sentAt - a.message.sentAt);
+        this.#reply(session, id, { results });
         return;
       }
       case 'messages.sendText': {
