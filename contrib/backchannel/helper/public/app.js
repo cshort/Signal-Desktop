@@ -64,6 +64,7 @@ const BANNERS = {
   offline:
     "Can't reach Signal. Make sure Signal is running and Settings > " +
     'Privacy > Apps on this computer is on. Retrying…',
+  unlinked: 'Link Signal to your phone first, then approve "Backchannel".',
   awaitingApproval: 'Approve "Backchannel" in the Signal window.',
   denied: 'Signal did not allow this app.',
   keyMismatch:

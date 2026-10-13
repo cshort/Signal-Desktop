@@ -104,6 +104,9 @@ export class FakeBridge {
   #keys = generateKeyPairSync('ed25519');
   // 'approve' | 'deny'
   approval = 'approve';
+  // false: like a new install before linking (authorization.request answers
+  // NOT_READY without a dialog).
+  linked = true;
   grants = new Map();
   conversations = [];
   messages = new Map();
@@ -331,6 +334,11 @@ export class FakeBridge {
         if (!ok) {
           this.#error(session, id, 'NOT_AUTHORIZED');
           session.socket.end();
+          return;
+        }
+        if (!this.grants.has(params.publicKey) && !this.linked) {
+          // Signal asks for approval only once it's linked to a phone.
+          this.#error(session, id, 'NOT_READY');
           return;
         }
         if (!this.grants.has(params.publicKey) && this.approval === 'deny') {

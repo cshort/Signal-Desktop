@@ -1135,6 +1135,37 @@ describe('backchannel helper', () => {
   });
 });
 
+describe('backchannel helper before Signal is linked', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'srb-sock-'));
+  const socketPath = bridgePath(dir);
+  const port = 48_500 + Math.floor(Math.random() * 500);
+  const bridge = new FakeBridge();
+  let helper;
+
+  before(async () => {
+    bridge.linked = false;
+    await bridge.listen(socketPath);
+    helper = await startHelper({ socketPath, port });
+  });
+
+  after(async () => {
+    await helper.stop();
+    await bridge.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('waits for linking, then asks for approval', async () => {
+    await waitFor(() => /bridge: unlinked/.test(helper.output()));
+    assert.match(helper.output(), /waiting for Signal to be linked/);
+    assert.doesNotMatch(helper.output(), /awaitingApproval/);
+    const state = await http(port, { path: `/${helper.token}/api/state` });
+    assert.equal(JSON.parse(state.text).state, 'unlinked');
+
+    bridge.linked = true;
+    await waitFor(() => /bridge: ready/.test(helper.output()), 15_000);
+  });
+});
+
 describe('backchannel helper when the user says no', () => {
   const dir = mkdtempSync(join(tmpdir(), 'srb-sock-'));
   const socketPath = bridgePath(dir);

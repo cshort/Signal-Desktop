@@ -761,3 +761,15 @@ when the original isn't loaded. The page shows "Photo", "Video", "GIF",
 right, in bubbles and in the reply bar.
 
 WHY: Mike asked (2026-10-13 12:47 PT); quotes of photos read "Attachment".
+
+## F26. Fork only: no approval dialog before Signal is linked
+
+DECISION: `authorization.request` from a key without a grant answers
+`NOT_READY` ("Signal is not linked") while Signal is unlinked, instead of
+showing the approval dialog. The helper retries every 5 seconds, shows
+"Link Signal to your phone first", and logs the wait once.
+
+WHY: On a new install the helper asked at once, and Signal's dialog
+covered the link QR code, so nobody could link (found by the Backchannel
+repo's build check, 2026-10-13). Linking first is also the sensible order:
+decide whether to trust an app once Signal is yours.

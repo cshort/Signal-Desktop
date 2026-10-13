@@ -51,6 +51,7 @@ import {
   PROTOCOL_NAME,
   SERVICE_METHOD_CAPABILITIES,
   SERVICE_PARAM_SCHEMAS,
+  SessionStatus,
   authenticateParamsSchema,
   eventsSubscribeParamsSchema,
   eventsUnsubscribeParamsSchema,
@@ -634,6 +635,14 @@ export class ExternalClientSession {
         this.#sendResult(request.id, {
           capabilities: existing.capabilities,
         } satisfies AuthorizationResultType);
+        return;
+      }
+
+      // Fork addition: no approval dialog before Signal is linked. On a new
+      // install it would cover the link QR code, and the user should link
+      // before deciding whether to trust an app. The client asks again.
+      if ((await this.#host.getStatus()) === SessionStatus.Unlinked) {
+        this.#sendError(request.id, ErrorCode.NotReady, 'Signal is not linked');
         return;
       }
 

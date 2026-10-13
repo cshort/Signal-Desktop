@@ -542,6 +542,24 @@ describe('externalClient/ExternalClientServer', () => {
       assert.isUndefined(await authority.findGrant(key.publicKey));
     });
 
+    it('asks for approval only once Signal is linked', async () => {
+      await startServer();
+      status = SessionStatus.Unlinked;
+      const key = generateFakeClientKey();
+      const client = await connectClient();
+      const response = await client.requestAuthorization(
+        key,
+        await client.hello(),
+        ['conversations.read']
+      );
+      assert.strictEqual(response.error?.code, ErrorCode.NotReady);
+      assert.isEmpty(prompts);
+
+      status = SessionStatus.Ready;
+      await approvedClient(key);
+      assert.lengthOf(prompts, 1);
+    });
+
     it('refuses capabilities this build does not implement', async () => {
       await startServer();
       const client = await connectClient();
@@ -704,8 +722,8 @@ describe('externalClient/ExternalClientServer', () => {
 
     it('reports status only to authorized clients', async () => {
       await startServer();
-      status = SessionStatus.Unlinked;
       const { client } = await approvedClient();
+      status = SessionStatus.Unlinked;
       const response = await client.request('session.getStatus');
       assert.deepEqual(response.result, { state: 'unlinked' });
     });

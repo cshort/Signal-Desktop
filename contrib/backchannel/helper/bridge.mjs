@@ -52,6 +52,9 @@ const MAX_IN_FLIGHT = 12;
 export const BridgeState = {
   // Signal is not running, or its bridge is off.
   Offline: 'offline',
+  // Signal is running but not linked to a phone yet. Signal asks for
+  // approval only after linking, so the dialog doesn't cover the QR code.
+  Unlinked: 'unlinked',
   // Connected; waiting for the user to answer Signal's approval dialog.
   AwaitingApproval: 'awaitingApproval',
   // The user said no in Signal. Waits for retryApproval().
@@ -312,6 +315,7 @@ export class Bridge {
     const socket = connect(this.#endpoint);
     this.#socket = socket;
     let buffered = Buffer.alloc(0);
+    let unlinked = false;
 
     socket.on('data', chunk => {
       buffered = Buffer.concat([buffered, chunk]);
@@ -347,18 +351,25 @@ export class Bridge {
         this.#state !== BridgeState.Denied &&
         this.#state !== BridgeState.KeyMismatch
       ) {
-        this.#setState(BridgeState.Offline);
+        this.#setState(unlinked ? BridgeState.Unlinked : BridgeState.Offline);
         this.#scheduleRetry(this.#nextRetryMs);
         this.#nextRetryMs = 5000;
       }
     });
     socket.once('connect', () => {
       this.#handshake().catch(error => {
-        this.#log(`handshake failed: ${error.message}`);
+        if (error.code !== 'NOT_READY') {
+          this.#log(`handshake failed: ${error.message}`);
+        } else if (this.#state !== BridgeState.Unlinked) {
+          this.#log('waiting for Signal to be linked to a phone');
+        }
         if (error.code === 'PERMISSION_DENIED') {
           this.#setState(BridgeState.Denied);
         } else if (error.code === 'KEY_MISMATCH') {
           this.#setState(BridgeState.KeyMismatch);
+        } else if (error.code === 'NOT_READY') {
+          // Not linked yet: ask again shortly, without a dialog meanwhile.
+          unlinked = true;
         } else if (error.code === 'RATE_LIMITED') {
           // Signal is limiting approval prompts; don't ask again soon.
           this.#nextRetryMs = 60_000;
@@ -416,13 +427,24 @@ export class Bridge {
     // fork's additions still works for everything else.
     const offered = hello.capabilities ?? CAPABILITIES;
     const wanted = CAPABILITIES.filter(c => offered.includes(c));
-    this.#setState(BridgeState.AwaitingApproval);
-    const granted = await this.call('authorization.request', {
-      publicKey: this.#key.publicKey,
-      signature,
-      displayName: this.#displayName,
-      capabilities: wanted,
-    });
+    // Signal answers at once when it isn't linked yet (NOT_READY) or the key
+    // holds a grant; a request still open after a moment means its approval
+    // dialog is up.
+    const asking = setTimeout(
+      () => this.#setState(BridgeState.AwaitingApproval),
+      500
+    );
+    let granted;
+    try {
+      granted = await this.call('authorization.request', {
+        publicKey: this.#key.publicKey,
+        signature,
+        displayName: this.#displayName,
+        capabilities: wanted,
+      });
+    } finally {
+      clearTimeout(asking);
+    }
     this.#capabilities = granted.capabilities;
     if (!this.#key.serverPublicKey) {
       this.#key.serverPublicKey = hello.server.publicKey;
