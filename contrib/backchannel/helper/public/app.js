@@ -5171,6 +5171,20 @@ const STYLE_SHORTCUT = {
   monospace: 'Ctrl+E',
   spoiler: 'Ctrl+Shift+B',
 };
+// The menu and the bar: Signal's styles, plus bold italic in one step (two
+// ranges over the same text, as Signal itself sends it).
+const FORMAT_OPTIONS = [
+  { key: 'bold', styles: ['bold'] },
+  { key: 'italic', styles: ['italic'] },
+  { key: 'bolditalic', styles: ['bold', 'italic'], label: 'Bold Italic' },
+  { key: 'strikethrough', styles: ['strikethrough'] },
+  { key: 'monospace', styles: ['monospace'] },
+  { key: 'spoiler', styles: ['spoiler'] },
+].map(o => ({
+  label: STYLE_LABEL[o.key],
+  shortcut: STYLE_SHORTCUT[o.key] ?? '',
+  ...o,
+}));
 const CLASS_STYLE = Object.fromEntries(
   Object.entries(STYLE_CLASS).map(([style, cls]) => [cls, style])
 );
@@ -5499,21 +5513,24 @@ function composeForSend() {
   return { body, mentions, formatting };
 }
 
-// Bold and the rest: on for the whole selection unless all of it has it.
+// Bold and the rest (or several at once): on for the whole selection
+// unless all of it has them.
 function toggleStyle(style) {
+  const wanted = [style].flat();
   const at = selectionOffsets();
   if (!at || at.start === at.end) {
     return;
   }
   const chars = readCompose();
-  const picked = chars.slice(at.start, at.end);
-  const on = !picked.every(c => c.styles.has(style));
+  const on = !selectionHas(wanted);
   for (let i = at.start; i < at.end; i += 1) {
     const styles = new Set(chars[i].styles);
-    if (on) {
-      styles.add(style);
-    } else {
-      styles.delete(style);
+    for (const one of wanted) {
+      if (on) {
+        styles.add(one);
+      } else {
+        styles.delete(one);
+      }
     }
     chars[i] = { ...chars[i], styles };
   }
@@ -5524,13 +5541,14 @@ function toggleStyle(style) {
 }
 
 function selectionHas(style) {
+  const wanted = [style].flat();
   const at = selectionOffsets();
   if (!at || at.start === at.end) {
     return false;
   }
   return readCompose()
     .slice(at.start, at.end)
-    .every(c => c.styles.has(style));
+    .every(c => wanted.every(one => c.styles.has(one)));
 }
 
 // Mentions name members of one chat; elsewhere they become plain words.
@@ -5911,12 +5929,20 @@ async function sendVoiceNote(note) {
 
 // --- format bar and menu -------------------------------------------------------
 
-function styleButton(style, onClick) {
-  const b = el('button', `format-button fb-${style}`);
+function styleButton(option, onClick) {
+  const b = el('button', `format-button fb-${option.key}`);
   b.type = 'button';
-  b.title = `${STYLE_LABEL[style]} (${STYLE_SHORTCUT[style]})`;
-  b.setAttribute('aria-label', STYLE_LABEL[style]);
-  b.append(el('span', STYLE_CLASS[style], STYLE_LABEL[style][0]));
+  b.title = option.shortcut
+    ? `${option.label} (${option.shortcut})`
+    : option.label;
+  b.setAttribute('aria-label', option.label);
+  b.append(
+    el(
+      'span',
+      option.styles.map(style => STYLE_CLASS[style]).join(' '),
+      option.styles.map(style => STYLE_LABEL[style][0]).join('')
+    )
+  );
   b.addEventListener('mousedown', e => {
     // Keep the selection in the box.
     e.preventDefault();
@@ -5938,13 +5964,15 @@ function updateFormatBar() {
   }
   if (bar.childElementCount === 0) {
     bar.append(
-      ...STYLES.map(style => styleButton(style, () => toggleStyle(style)))
+      ...FORMAT_OPTIONS.map(option =>
+        styleButton(option, () => toggleStyle(option.styles))
+      )
     );
   }
-  for (const style of STYLES) {
+  for (const option of FORMAT_OPTIONS) {
     bar
-      .querySelector(`.fb-${style}`)
-      .classList.toggle('active', selectionHas(style));
+      .querySelector(`.fb-${option.key}`)
+      .classList.toggle('active', selectionHas(option.styles));
   }
   bar.hidden = false;
   const rect = window.getSelection().getRangeAt(0).getBoundingClientRect();
@@ -5995,12 +6023,12 @@ function openFormatMenu(x, y) {
     item('Copy', 'Ctrl+C', () => document.execCommand('copy')),
     item('Paste', 'Ctrl+V', () => pasteFromClipboard()),
     el('div', 'menu-separator'),
-    ...STYLES.map(style =>
+    ...FORMAT_OPTIONS.map(option =>
       item(
-        STYLE_LABEL[style],
-        STYLE_SHORTCUT[style],
-        () => toggleStyle(style),
-        selectionHas(style)
+        option.label,
+        option.shortcut,
+        () => toggleStyle(option.styles),
+        selectionHas(option.styles)
       )
     )
   );
