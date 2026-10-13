@@ -705,8 +705,26 @@ export const attachmentsUploadBeginParamsSchema = z
     contentType: z.string().min(1).max(255),
     fileName: z.string().min(1).max(255).optional(),
     size: z.number().int().min(1),
+    // Fork addition (decision F19): a recorded voice note, sent the way
+    // Signal's recorder sends one. The waveform is Signal's: up to 100
+    // peaks of 0-255.
+    voiceNote: z
+      .object({
+        durationSeconds: z
+          .number()
+          .min(0)
+          .max(24 * 60 * 60),
+        waveform: z.array(z.number().int().min(0).max(255)).max(100),
+      })
+      .strict()
+      .optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    params =>
+      !params.voiceNote ||
+      (params.contentType.startsWith('audio/') && !params.fileName)
+  );
 export type AttachmentsUploadBeginParamsType = z.infer<
   typeof attachmentsUploadBeginParamsSchema
 >;

@@ -3060,3 +3060,73 @@ label.poll-option {
   top: -8px;
   right: -4px;
 }
+
+/* Recording a voice message, as Signal's composer does: cancel, a red dot,
+   the time, the live level, and send. */
+.composer.recording > :not(.recorder) {
+  display: none;
+}
+
+.recorder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  height: 36px;
+}
+
+.record-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--error);
+  animation: record-blink 1.2s ease-in-out infinite;
+}
+
+@keyframes record-blink {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.record-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.record-peaks {
+  flex: 1;
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--hover);
+}
+
+.record-peaks b {
+  flex: none;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--muted);
+}
+
+.recorder audio {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+}
+
+.recorder[data-mode='draft'] .record-peaks,
+.recorder[data-mode='draft'] .record-time {
+  display: none;
+}
+
+.recorder #record-send {
+  height: 36px;
+}

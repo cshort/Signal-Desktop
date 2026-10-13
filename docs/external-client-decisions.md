@@ -598,3 +598,22 @@ scrolled up.
 
 WHY: Mike, 2026-10-13 09:42 PT: "when you go into a chat / thread, it puts
 a line before the first unread message, so you know where to start."
+
+## F19. Fork only: recording voice notes
+
+DECISION: `attachments.uploadBegin` takes an optional `voiceNote
+{durationSeconds, waveform}` (an audio type, no file name; no new
+capability). Signal then builds the attachment exactly as its own recorder
+does (completeRecording in ducks/audioRecorder): the voice message flag,
+the waveform and the duration, without the file processing other uploads
+get.
+
+The page records with Signal's own encoder, the mp3Encoder audio worklet
+Signal Desktop records with (90 kbps MP3, its waveform and level meter),
+which the signal-headless image copies next to the page. Recording looks
+like Signal's: cancel, a red dot, the time, the live level and Send; Escape
+cancels, Signal's one-hour limit stops it, and leaving the window or the
+chat keeps it as a draft to play, send or discard. The page needs the
+microphone, so the browser (Rambox) asks the first time.
+
+WHY: Next gap on Mike's standing parity rule (2026-10-13).

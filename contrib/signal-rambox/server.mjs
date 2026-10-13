@@ -15,7 +15,7 @@
 //     approves).
 
 import { timingSafeEqual } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 
@@ -83,13 +83,16 @@ const STATIC_FILES = {
   ),
   // Signal's notification sound.
   'sounds/notification.ogg': ['sounds/notification.ogg', 'audio/ogg'],
+  // Signal's voice note encoder (bundles/workers/mp3Encoder.js), copied in
+  // by the signal-headless image; without it the page can't record.
+  'mp3Encoder.js': ['mp3Encoder.js', 'text/javascript; charset=utf-8'],
 };
 
 const SECURITY_HEADERS = {
   'Cache-Control': 'no-store',
   'Content-Security-Policy':
     "default-src 'none'; script-src 'self'; style-src 'self'; " +
-    "img-src 'self' blob:; font-src 'self'; media-src 'self'; connect-src 'self'; " +
+    "img-src 'self' blob:; font-src 'self'; media-src 'self' blob:; connect-src 'self'; " +
     "base-uri 'none'; " +
     "form-action 'none'; frame-ancestors 'none'",
   'Referrer-Policy': 'no-referrer',
@@ -291,7 +294,18 @@ export function createWebServer({
     const size = Number(req.headers['content-length']);
     const contentType = url.searchParams.get('contentType') ?? '';
     const fileName = url.searchParams.get('name') || undefined;
-    if (!Number.isSafeInteger(size) || size < 1 || contentType === '') {
+    let voiceNote;
+    try {
+      voiceNote = JSON.parse(url.searchParams.get('voiceNote') ?? 'null');
+    } catch {
+      voiceNote = undefined;
+    }
+    if (
+      !Number.isSafeInteger(size) ||
+      size < 1 ||
+      contentType === '' ||
+      voiceNote === undefined
+    ) {
       sendJson(res, 400, { error: { code: 'INVALID_ARGUMENT' } });
       return;
     }
@@ -299,6 +313,7 @@ export function createWebServer({
       contentType,
       size,
       ...(fileName ? { fileName: fileName.slice(0, 255) } : {}),
+      ...(voiceNote ? { voiceNote } : {}),
     });
     let offset = 0;
     let pending = [];
@@ -821,7 +836,12 @@ export function createWebServer({
       return;
     }
     const [file, type] = entry;
-    send(res, 200, type, readFileSync(join(publicDir, file)));
+    const path = join(publicDir, file);
+    if (!existsSync(path)) {
+      send(res, 404, 'text/plain; charset=utf-8', 'not found');
+      return;
+    }
+    send(res, 200, type, readFileSync(path));
   });
 
   return {

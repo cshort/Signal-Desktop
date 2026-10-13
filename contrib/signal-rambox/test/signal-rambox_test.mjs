@@ -703,6 +703,37 @@ describe('signal-rambox', () => {
     assert.equal(JSON.parse(res.text).details.title, 'Lydia');
   });
 
+  it('sends voice notes as Signal records them', async () => {
+    const voiceNote = { durationSeconds: 2, waveform: [0, 255] };
+    const params = new URLSearchParams({
+      contentType: 'audio/mpeg',
+      voiceNote: JSON.stringify(voiceNote),
+    });
+    const res = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/upload?${params}`,
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: Buffer.from('ID3 fake mp3'),
+    });
+    assert.equal(res.status, 200);
+    const call = bridge.calls.findLast(
+      c => c.method === 'attachments.uploadBegin'
+    );
+    assert.deepEqual(call.params.voiceNote, voiceNote);
+    const bad = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/upload?contentType=audio%2Fmpeg&voiceNote=%7B`,
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: Buffer.from('x'),
+    });
+    assert.equal(bad.status, 400);
+  });
+
+  it('serves the voice note encoder only when the image has it', async () => {
+    const res = await http(port, { path: `/${helper.token}/mp3Encoder.js` });
+    assert.equal(res.status, 404);
+  });
+
   it('searches messages, in all chats or one', async () => {
     const res = await http(port, {
       path: `/${helper.token}/api/search?q=hello&conversationId=c1`,

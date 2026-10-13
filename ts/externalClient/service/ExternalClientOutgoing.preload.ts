@@ -15,7 +15,13 @@ import {
   getMessagePropsSelector,
 } from '../../state/selectors/message.preload.ts';
 import type { MessageAttributesType } from '../../model-types.d.ts';
-import type { AttachmentType } from '../../types/Attachment.std.ts';
+import * as Bytes from '../../Bytes.std.ts';
+import { SignalService as Proto } from '../../protobuf/index.std.ts';
+import type {
+  AttachmentType,
+  InMemoryAttachmentDraftType,
+} from '../../types/Attachment.std.ts';
+import { DurationInSeconds } from '../../util/durations/index.std.ts';
 import {
   getAttachmentSizeLimit,
   isAttachmentTooLargeToSend,
@@ -75,6 +81,7 @@ const MAX_PENDING_UPLOAD_BYTES = 512 * 1024 * 1024;
 type UploadType = {
   contentType: string;
   fileName: string | undefined;
+  voiceNote: AttachmentsUploadBeginParamsType['voiceNote'];
   size: number;
   chunks: Array<Uint8Array<ArrayBuffer>>;
   received: number;
@@ -104,6 +111,7 @@ export function beginUpload({
   contentType,
   fileName,
   size,
+  voiceNote,
 }: AttachmentsUploadBeginParamsType): ServiceResultType {
   pruneUploads();
   const limit = getAttachmentSizeLimit({
@@ -124,6 +132,7 @@ export function beginUpload({
   uploads.set(uploadId, {
     contentType,
     fileName,
+    voiceNote,
     size,
     chunks: [],
     received: 0,
@@ -155,6 +164,23 @@ export function appendUpload({
     complete: upload.received === upload.size,
   };
   return { ok: true, value };
+}
+
+function toVoiceNote(
+  upload: UploadType,
+  { durationSeconds, waveform }: NonNullable<UploadType['voiceNote']>
+): InMemoryAttachmentDraftType {
+  const data = Bytes.concatenate(upload.chunks);
+  return {
+    pending: false,
+    clientUuid: generateUuid(),
+    contentType: stringToMIMEType(upload.contentType),
+    data,
+    size: data.byteLength,
+    flags: Proto.AttachmentPointer.Flags.VOICE_MESSAGE,
+    audioWaveform: waveform,
+    duration: DurationInSeconds.fromSeconds(durationSeconds),
+  };
 }
 
 // True when every upload exists and has all of its content.
@@ -197,14 +223,17 @@ export async function takeUploads(
       if (!upload) {
         throw new Error('upload vanished');
       }
-      const file = new File(upload.chunks, upload.fileName ?? 'file', {
-        type: upload.contentType,
-      });
-      // oxlint-disable-next-line no-await-in-loop
-      const inMemory = await processAttachment(file, {
-        generateScreenshot: true,
-        flags: null,
-      });
+      // A voice note goes as Signal's recorder makes one (completeRecording
+      // in ducks/audioRecorder); anything else as the composer's files.
+      const inMemory = upload.voiceNote
+        ? toVoiceNote(upload, upload.voiceNote)
+        : // oxlint-disable-next-line no-await-in-loop
+          await processAttachment(
+            new File(upload.chunks, upload.fileName ?? 'file', {
+              type: upload.contentType,
+            }),
+            { generateScreenshot: true, flags: null }
+          );
       if (!inMemory) {
         throw new Error('processAttachment refused the file');
       }

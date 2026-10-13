@@ -10,6 +10,7 @@ import {
   LIMITS,
   MAX_ATTACHMENT_CHUNK_BYTES,
   PROTOCOL_NAME,
+  attachmentsUploadBeginParamsSchema,
   attachmentsUploadChunkParamsSchema,
   helloParamsSchema,
   messagesEditParamsSchema,
@@ -168,6 +169,39 @@ describe('externalClient/protocol', () => {
       );
       assert.isFalse(
         accepts(schema, { conversationId, body: '', attachmentUploadIds: [] })
+      );
+    });
+
+    it('takes voice notes as Signal records them', () => {
+      const schema = attachmentsUploadBeginParamsSchema;
+      const voiceNote = { durationSeconds: 3.5, waveform: [0, 128, 255] };
+      assert.isTrue(
+        accepts(schema, { contentType: 'audio/mpeg', size: 10, voiceNote })
+      );
+      assert.isFalse(
+        accepts(schema, { contentType: 'image/png', size: 10, voiceNote })
+      );
+      assert.isFalse(
+        accepts(schema, {
+          contentType: 'audio/mpeg',
+          fileName: 'a.mp3',
+          size: 10,
+          voiceNote,
+        })
+      );
+      assert.isFalse(
+        accepts(schema, {
+          contentType: 'audio/mpeg',
+          size: 10,
+          voiceNote: { ...voiceNote, waveform: [256] },
+        })
+      );
+      assert.isFalse(
+        accepts(schema, {
+          contentType: 'audio/mpeg',
+          size: 10,
+          voiceNote: { ...voiceNote, waveform: new Array(101).fill(1) },
+        })
       );
     });
 

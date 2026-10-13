@@ -165,6 +165,7 @@ const ICONS = {
   back: 'M15 5l-7 7 7 7',
   down: 'M12 5v14M5 12l7 7 7-7',
   bell: 'M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0',
+  mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3',
   check: 'M5 12.5l4.5 4.5L19 7.5',
   timer: 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM12 9v4l2.5 2M10 2h4',
   pin: 'M9 4h6l-1 6 4 3v2H6v-2l4-3zM12 15v6',
@@ -2050,6 +2051,9 @@ function confirmDelete(c) {
 
 // Back to no chat open, as Signal after archiving or deleting one.
 function closeConversation() {
+  if (recording) {
+    cancelRecording();
+  }
   selectedId = null;
   messages = new Map();
   nextCursor = null;
@@ -2343,6 +2347,10 @@ async function selectConversation(id) {
   if (id === selectedId) {
     return;
   }
+  // A recording in progress stays with its chat as a draft.
+  if (recording) {
+    await stopRecording({ send: false });
+  }
   selectedId = id;
   messages = new Map();
   nextCursor = null;
@@ -2363,6 +2371,7 @@ async function selectConversation(id) {
   $('composer').hidden = false;
   renderChatHeader();
   renderConversations();
+  renderVoiceDraft();
   $('message-list').replaceChildren();
   opening = true;
   try {
@@ -4536,6 +4545,262 @@ function onComposeInput() {
   updateFormatBar();
 }
 
+// --- voice notes (Signal's recorder) ------------------------------------------
+
+// Signal stops a recording at one hour.
+const MAX_RECORDING_MS = 60 * 60_000;
+const MAX_PEAK_BARS = 120;
+let encoderContext = null;
+// { conversationId, stream, source, worklet, chunks, startedAt, peaks,
+//   timer, done } while recording; then { conversationId, blob, url,
+//   durationSeconds, waveform } as a draft waiting to be sent.
+let recording = null;
+let voiceDraft = null;
+
+function formatDuration(seconds) {
+  const s = Math.floor(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const pad = n => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+}
+
+async function getEncoderContext() {
+  if (!encoderContext) {
+    const context = new AudioContext();
+    encoderContext = context.audioWorklet
+      .addModule('mp3Encoder.js')
+      .then(() => context)
+      .catch(error => {
+        encoderContext = null;
+        context.close().catch(() => {});
+        throw error;
+      });
+  }
+  return encoderContext;
+}
+
+function showRecorder(mode) {
+  const on = mode !== null;
+  $('composer').classList.toggle('recording', on);
+  $('recorder').hidden = !on;
+  $('recorder').dataset.mode = mode ?? '';
+  $('record-dot').hidden = mode !== 'recording';
+  $('record-peaks').hidden = mode !== 'recording';
+  $('record-audio').hidden = mode !== 'draft';
+  $('record-time').hidden = mode !== 'recording';
+}
+
+function renderPeaks() {
+  const bars = recording.peaks
+    .slice(-MAX_PEAK_BARS)
+    .reverse()
+    .map(peak => {
+      const bar = el('b');
+      bar.style.height = `${Math.max(8, (peak / 255) * 100)}%`;
+      return bar;
+    });
+  $('record-peaks').replaceChildren(...bars);
+}
+
+async function startRecording() {
+  if (recording || voiceDraft || !selectedId) {
+    return;
+  }
+  if (!window.AudioWorkletNode || !navigator.mediaDevices?.getUserMedia) {
+    toast("This browser can't record voice messages.");
+    return;
+  }
+  const conversationId = selectedId;
+  let context;
+  try {
+    context = await getEncoderContext();
+  } catch {
+    toast('Voice messages need the encoder from the Signal image.');
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: { ideal: 1 } },
+    });
+  } catch {
+    toast('Allow the microphone for this page to record voice messages.');
+    return;
+  }
+  if (conversationId !== selectedId) {
+    stream.getTracks().forEach(track => track.stop());
+    return;
+  }
+  await context.resume();
+  // As Signal's AudioRecorder: the encoder sends MP3 chunks, then the final
+  // frame and the header with the full duration.
+  const worklet = new AudioWorkletNode(context, 'mp3-encoder', {
+    numberOfInputs: 1,
+    numberOfOutputs: 0,
+  });
+  const chunks = [];
+  const { promise: done, resolve } = Promise.withResolvers();
+  const state = {
+    conversationId,
+    stream,
+    worklet,
+    chunks,
+    startedAt: Date.now(),
+    peaks: [],
+    timer: null,
+    done,
+  };
+  worklet.port.onmessage = ({ data }) => {
+    if (data.type === 'chunk') {
+      chunks.push(data.chunk);
+    } else if (data.type === 'peak') {
+      state.peaks.push(data.peak);
+      if (recording === state) {
+        renderPeaks();
+      }
+    } else if (data.type === 'complete') {
+      chunks.push(data.finalFrame);
+      resolve(data);
+    }
+  };
+  state.source = context.createMediaStreamSource(stream);
+  state.source.connect(worklet);
+  state.timer = setInterval(() => {
+    const elapsed = Date.now() - state.startedAt;
+    $('record-time').textContent = formatDuration(elapsed / 1000);
+    if (elapsed >= MAX_RECORDING_MS) {
+      // As Signal: stopped at the limit, kept for you to send or discard.
+      toast('Voice message recording stopped at the maximum length.');
+      stopRecording({ send: false });
+    }
+  }, 250);
+  recording = state;
+  sendTyping(false);
+  $('record-time').textContent = '0:00';
+  $('record-peaks').replaceChildren();
+  showRecorder('recording');
+}
+
+// Ends the recording. Returns the voice note, or null if it was discarded.
+async function finishRecording() {
+  const state = recording;
+  if (!state) {
+    return null;
+  }
+  recording = null;
+  clearInterval(state.timer);
+  state.worklet.port.postMessage({ type: 'stop' });
+  const result = await state.done;
+  state.source.disconnect();
+  state.stream.getTracks().forEach(track => track.stop());
+  const total = state.chunks.reduce((n, c) => n + c.byteLength, 0);
+  const bytes = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of state.chunks) {
+    bytes.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  // The header with the full duration replaces the placeholder.
+  bytes.set(result.lametagFrame);
+  return {
+    conversationId: state.conversationId,
+    blob: new Blob([bytes], { type: 'audio/mpeg' }),
+    durationSeconds: result.duration,
+    waveform: result.waveform,
+  };
+}
+
+async function stopRecording({ send }) {
+  const note = await finishRecording();
+  if (!note) {
+    return;
+  }
+  if (send) {
+    showRecorder(null);
+    await sendVoiceNote(note);
+    return;
+  }
+  // Kept as a draft, as Signal does when you switch away.
+  voiceDraft = { ...note, url: URL.createObjectURL(note.blob) };
+  $('record-audio').src = voiceDraft.url;
+  showRecorder('draft');
+}
+
+// The draft shows only in its own chat.
+function renderVoiceDraft() {
+  if (recording) {
+    return;
+  }
+  showRecorder(
+    voiceDraft && voiceDraft.conversationId === selectedId ? 'draft' : null
+  );
+}
+
+function discardVoiceDraft() {
+  if (voiceDraft) {
+    URL.revokeObjectURL(voiceDraft.url);
+    voiceDraft = null;
+    $('record-audio').removeAttribute('src');
+  }
+}
+
+async function cancelRecording() {
+  await finishRecording();
+  discardVoiceDraft();
+  showRecorder(null);
+}
+
+async function sendVoiceDraft() {
+  const note = voiceDraft;
+  if (!note) {
+    return;
+  }
+  voiceDraft = null;
+  showRecorder(null);
+  await sendVoiceNote(note);
+  URL.revokeObjectURL(note.url);
+  $('record-audio').removeAttribute('src');
+}
+
+async function sendVoiceNote(note) {
+  const quoteMessageId =
+    replyTo && note.conversationId === selectedId ? replyTo.id : undefined;
+  try {
+    const params = new URLSearchParams({
+      contentType: 'audio/mpeg',
+      voiceNote: JSON.stringify({
+        durationSeconds: note.durationSeconds,
+        waveform: note.waveform,
+      }),
+    });
+    const res = await fetch(`api/upload?${params}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: note.blob,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const error = new Error(data.error?.message ?? `HTTP ${res.status}`);
+      error.code = data.error?.code;
+      throw error;
+    }
+    await api('api/send', {
+      conversationId: note.conversationId,
+      body: '',
+      attachmentUploadIds: [data.uploadId],
+      ...(quoteMessageId ? { quoteMessageId } : {}),
+    });
+    if (quoteMessageId) {
+      cancelReply();
+    }
+  } catch (error) {
+    showError(
+      `Couldn't send the voice message (${error.code ?? error.message}).`
+    );
+  }
+}
+
 // --- format bar and menu -------------------------------------------------------
 
 function styleButton(style, onClick) {
@@ -5499,6 +5764,19 @@ async function sendPollHere() {
   }
 }
 
+$('record').append(icon('mic'));
+$('record').addEventListener('click', startRecording);
+$('record-cancel').append(icon('trash'));
+$('record-cancel').addEventListener('click', cancelRecording);
+$('record-send').addEventListener('click', () =>
+  recording ? stopRecording({ send: true }) : sendVoiceDraft()
+);
+// As Signal: leaving the window keeps the recording as a draft.
+window.addEventListener('blur', () => {
+  if (recording) {
+    stopRecording({ send: false });
+  }
+});
 $('poll-open').append(icon('poll'));
 $('poll-open').addEventListener('click', openPollCompose);
 $('poll-compose-close').append(icon('close'));
@@ -5600,6 +5878,10 @@ document.addEventListener('click', e => {
   }
 });
 document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && recording) {
+    cancelRecording();
+    return;
+  }
   if (e.key === 'Escape') {
     closePopovers();
     closeLightbox();

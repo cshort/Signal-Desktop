@@ -70,7 +70,7 @@ Last reviewed: 2026-10-13, against the Signal release in fork main.
 | Forward to any number of chats                  | different | F4: no limit of five |
 | Stickers                                        | done      | F10                  |
 | Send link previews                              | missing   |                      |
-| Record voice notes                              | missing   |                      |
+| Record voice notes                              | done      | F19                  |
 | Send contact cards                              | missing   |                      |
 | GIF search                                      | missing   |                      |
 | Typing indicators (send them)                   | done      | F14                  |

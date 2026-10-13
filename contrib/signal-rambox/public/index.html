@@ -147,7 +147,28 @@
             data-placeholder="Message"
             spellcheck="true"
           ></div>
+          <button
+            type="button"
+            class="icon-button"
+            id="record"
+            title="Record voice message"
+            aria-label="Record voice message"
+          ></button>
           <button type="submit" id="send">Send</button>
+          <div class="recorder" id="recorder" hidden>
+            <button
+              type="button"
+              class="icon-button"
+              id="record-cancel"
+              title="Cancel"
+              aria-label="Cancel"
+            ></button>
+            <span class="record-dot" id="record-dot"></span>
+            <span class="record-time" id="record-time">0:00</span>
+            <span class="record-peaks" id="record-peaks"></span>
+            <audio id="record-audio" controls hidden></audio>
+            <button type="button" id="record-send">Send</button>
+          </div>
         </form>
       </section>
     </main>
