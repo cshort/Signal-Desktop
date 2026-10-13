@@ -15,6 +15,7 @@ import type {
 import { ErrorCode } from '../protocol.std.ts';
 import {
   getDtoContext,
+  getGroupMemberContact,
   getListedConversation,
 } from './serviceHelpers.preload.ts';
 
@@ -36,7 +37,9 @@ function text(value: string | undefined | null): string | null {
 export function getDetails({
   conversationId,
 }: ConversationsGetDetailsParamsType): ServiceResultType {
-  const model = getListedConversation(conversationId);
+  const model =
+    getListedConversation(conversationId) ??
+    getGroupMemberContact(conversationId);
   if (!model) {
     return { ok: false, code: ErrorCode.NotFound };
   }

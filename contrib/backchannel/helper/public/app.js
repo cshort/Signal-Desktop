@@ -37,6 +37,9 @@ let markReadInFlight = false;
 // A mark-read was asked for while one was in flight: run again after.
 let markReadAgain = false;
 let replyTo = null;
+// "Reply privately" links for the open chat (decision F23): group message
+// id -> link, and direct-chat reply id -> link.
+let privateLinks = { byGroupMessage: new Map(), byReply: new Map() };
 // The message being edited, if any.
 let editing = null;
 let preferredReactions = null;
@@ -1305,10 +1308,31 @@ function findQuoted(quote) {
   );
 }
 
-async function jumpToQuote(quote) {
+async function jumpToQuote(quote, m) {
   const conversationId = selectedId;
   const jump = ++quoteJump;
   let found = findQuoted(quote);
+  // A reply that quotes a message from another chat ("Reply privately"):
+  // Signal knows where it is.
+  if (!found && m && conversations.get(conversationId)?.type === 'direct') {
+    try {
+      const where = await api(
+        `api/locateQuote?${new URLSearchParams({ messageId: m.id })}`
+      );
+      if (jump !== quoteJump || conversationId !== selectedId) {
+        return;
+      }
+      if (where.conversationId !== conversationId) {
+        await jumpToMessage({
+          conversationId: where.conversationId,
+          id: where.messageId,
+        });
+        return;
+      }
+    } catch {
+      // Not found anywhere Signal can say; look further back here.
+    }
+  }
   for (let page = 0; !found && nextCursor && page < MAX_QUOTE_PAGES; page++) {
     try {
       // oxlint-disable-next-line no-await-in-loop
@@ -1344,14 +1368,25 @@ function flashMessage(messageId) {
   return true;
 }
 
-function renderQuote(quote) {
+function renderQuote(quote, m) {
   const box = el('span', 'quote');
-  if (quote.sentAt !== null) {
+  const link = m ? privateLinks.byReply.get(m.id) : undefined;
+  if (link) {
+    box.classList.add('jumps');
+    box.title = 'Go to the group message';
+    box.addEventListener('click', ev => {
+      ev.stopPropagation();
+      jumpToMessage({
+        conversationId: link.groupConversationId,
+        id: link.groupMessageId,
+      });
+    });
+  } else if (quote.sentAt !== null) {
     box.classList.add('jumps');
     box.title = 'Go to message';
     box.addEventListener('click', ev => {
       ev.stopPropagation();
-      jumpToQuote(quote);
+      jumpToQuote(quote, m);
     });
   }
   const author = quote.author ?? authorOf(quote.authorConversationId);
@@ -1362,6 +1397,16 @@ function renderQuote(quote) {
     nameLine(nameOf(quote.authorConversationId), author, 'quote-author'),
     el('span', 'quote-text', quote.text ?? 'Attachment')
   );
+  if (link) {
+    const group = conversations.get(link.groupConversationId);
+    box.append(
+      el(
+        'span',
+        'quote-from',
+        `Replied privately from ${group ? displayTitle(group) : 'a group'}`
+      )
+    );
+  }
   return box;
 }
 
@@ -1899,7 +1944,14 @@ function renderMessage(m, prev, next) {
     li.classList.add('with-avatar');
     if (lastOfRun && m.authorConversationId) {
       const who = authorOf(m.authorConversationId) ?? { title: 'Someone' };
-      li.append(avatar(m.authorConversationId, who, 28));
+      const face = avatar(m.authorConversationId, who, 28);
+      face.classList.add('clickable');
+      face.title = `About ${who.title}`;
+      face.addEventListener('click', ev => {
+        ev.stopPropagation();
+        openPerson(m.authorConversationId, m.author ?? who);
+      });
+      li.append(face);
     } else {
       li.append(el('span', 'avatar-spacer'));
     }
@@ -1914,10 +1966,18 @@ function renderMessage(m, prev, next) {
   const bubble = el('span', `bubble${jumbo ? ' jumbo' : ''}`);
 
   if (!outgoing && isGroupChat && firstOfRun) {
-    bubble.append(nameLine(nameOf(m.authorConversationId), m.author, 'author'));
+    const name = nameLine(nameOf(m.authorConversationId), m.author, 'author');
+    if (m.authorConversationId) {
+      name.classList.add('clickable');
+      name.addEventListener('click', ev => {
+        ev.stopPropagation();
+        openPerson(m.authorConversationId, m.author);
+      });
+    }
+    bubble.append(name);
   }
   if (m.quote) {
-    bubble.append(renderQuote(m.quote));
+    bubble.append(renderQuote(m.quote, m));
   }
   if (m.kind === 'text' && m.attachments.length > 0) {
     bubble.classList.add('has-media');
@@ -1962,6 +2022,10 @@ function renderMessage(m, prev, next) {
   column.append(line);
   if (m.reactions.length > 0) {
     column.append(renderReactions(m));
+  }
+  const privateLink = renderPrivateLink(m);
+  if (privateLink) {
+    column.append(privateLink);
   }
   li.append(column);
   return li;
@@ -2494,6 +2558,44 @@ function renderRequestBar() {
   bar.hidden = false;
 }
 
+// --- reply privately links (decision F23) ----------------------------------
+
+function addPrivateLink(link) {
+  privateLinks.byGroupMessage.set(link.groupMessageId, link);
+  privateLinks.byReply.set(link.replyMessageId, link);
+}
+
+async function loadPrivateLinks(conversationId) {
+  try {
+    const { links } = await api(
+      `api/privateReplies?${new URLSearchParams({ conversationId })}`
+    );
+    if (conversationId === selectedId) {
+      links.forEach(addPrivateLink);
+    }
+  } catch {
+    // Without links the replies still show, as in Signal.
+  }
+}
+
+// Under a group message you answered privately: a link to that reply.
+function renderPrivateLink(m) {
+  const link = privateLinks.byGroupMessage.get(m.id);
+  if (!link) {
+    return null;
+  }
+  const b = el('button', 'private-link', 'You replied privately');
+  b.type = 'button';
+  b.addEventListener('click', ev => {
+    ev.stopPropagation();
+    jumpToMessage({
+      conversationId: link.dmConversationId,
+      id: link.replyMessageId,
+    });
+  });
+  return b;
+}
+
 // --- chat details (Signal's chat details and About pages) ---
 
 let detailsFor = null;
@@ -2513,8 +2615,26 @@ function detailRow(iconName, label, sub) {
   return row;
 }
 
+// People opened from a group (their photo or name) who have no chat in the
+// list yet: id -> a stand-in chat for the details dialog.
+const people = new Map();
+
+// As Signal's contact card from a group: their About, and Message.
+function openPerson(conversationId, author) {
+  if (!conversations.has(conversationId)) {
+    people.set(conversationId, {
+      id: conversationId,
+      type: 'direct',
+      title: author?.title ?? 'Someone',
+      avatarColor: author?.avatarColor ?? null,
+      avatarVersion: author?.avatarVersion ?? null,
+    });
+  }
+  openDetails(conversationId);
+}
+
 async function openDetails(conversationId, { refresh = false } = {}) {
-  const c = conversations.get(conversationId);
+  const c = conversations.get(conversationId) ?? people.get(conversationId);
   if (!c) {
     return;
   }
@@ -2625,14 +2745,26 @@ function renderDetails(c, d) {
   } else {
     rows.push(...groupDetailRows(c, d));
   }
-  if (!c.noteToSelf || canManageChats()) {
+  if (c.type === 'direct' && !c.noteToSelf && c.id !== selectedId) {
+    const message = el('button', 'setting-button primary', 'Message');
+    message.type = 'button';
+    message.addEventListener('click', () => {
+      closeDetails();
+      openContact(c.id);
+    });
+    rows.push(el('div', 'details-actions'));
+    rows.at(-1).append(message);
+  }
+  if (conversations.has(c.id) && (!c.noteToSelf || canManageChats())) {
     const options = el('button', 'setting-button', 'Chat options');
     options.type = 'button';
     options.addEventListener('click', ev => {
       ev.stopPropagation();
       openChatMenu(c.id, options);
     });
-    rows.push(el('div', 'details-actions'));
+    if (!rows.at(-1)?.classList.contains('details-actions')) {
+      rows.push(el('div', 'details-actions'));
+    }
     rows.at(-1).append(options);
     if (d?.type === 'group' && d.members.some(m => m.me)) {
       const leave = el('button', 'setting-button danger', 'Leave group');
@@ -3243,8 +3375,11 @@ async function selectConversation(id) {
   renderVoiceDraft();
   $('message-list').replaceChildren();
   opening = true;
+  privateLinks = { byGroupMessage: new Map(), byReply: new Map() };
+  const links = loadPrivateLinks(id);
   try {
     await loadMessages();
+    await links;
     const unread = conversations.get(id)?.unreadCount ?? 0;
     if (unread > 0) {
       await placeUnreadLine(unread);
@@ -4565,6 +4700,14 @@ function openMoreMenu(m, anchor) {
   if (canReplyTo(m)) {
     add('reply', 'Reply', () => startReply(m));
   }
+  if (
+    canReplyTo(m) &&
+    m.direction !== 'outgoing' &&
+    m.authorConversationId &&
+    conversations.get(selectedId)?.type === 'group'
+  ) {
+    add('reply', 'Reply privately', () => replyPrivately(m));
+  }
   if (canForward(m)) {
     add('forward', 'Forward', () => openForward(m));
   }
@@ -4595,6 +4738,17 @@ function openMoreMenu(m, anchor) {
   }
   menu.replaceChildren(...items);
   placePopover(menu, anchor);
+}
+
+// Beyond Signal (decision F23): open the direct chat with the sender and
+// quote their group message there.
+async function replyPrivately(m) {
+  const groupId = selectedId;
+  await openContact(m.authorConversationId);
+  if (selectedId !== m.authorConversationId) {
+    return;
+  }
+  startReply({ ...m, privateFrom: groupId });
 }
 
 function startReply(m) {
@@ -4901,8 +5055,19 @@ async function sendCurrent() {
       body,
       ...withMentions,
       ...(replyTo ? { quoteMessageId: replyTo.id } : {}),
+      ...(replyTo?.privateFrom
+        ? { privateReplyFrom: replyTo.privateFrom }
+        : {}),
       ...(attachmentUploadIds.length > 0 ? { attachmentUploadIds } : {}),
     });
+    if (replyTo?.privateFrom) {
+      addPrivateLink({
+        groupConversationId: replyTo.privateFrom,
+        groupMessageId: replyTo.id,
+        dmConversationId: conversationId,
+        replyMessageId: message.id,
+      });
+    }
     clearDrafts(conversationId);
     setCompose('');
     cancelReply();

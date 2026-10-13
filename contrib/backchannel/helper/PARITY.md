@@ -30,34 +30,36 @@ Last reviewed: 2026-10-13, against the Signal release in fork main.
 
 ## Conversation
 
-| Feature                                                  | Status  | Notes                                                |
-| -------------------------------------------------------- | ------- | ---------------------------------------------------- |
-| Messages, author names and colors, member labels         | done    | F1                                                   |
-| Reactions, who reacted                                   | done    | F1, viewer                                           |
-| Quoted replies, jump to the original                     | done    | F1, F13                                              |
-| Edit and delete (for me, for everyone)                   | done    | F3                                                   |
-| Photos, videos, GIFs, files, voice notes (play)          | done    | F2                                                   |
-| Long messages                                            | done    |                                                      |
-| Polls (vote, end, create, send to many chats)            | done    | F6                                                   |
-| Stickers (view and send)                                 | done    | F10                                                  |
-| Link previews (view)                                     | done    |                                                      |
-| Mark read as you read, clears "mark as unread"           | done    | F13                                                  |
-| Unread line, jump-to-newest button with count            | done    | F18                                                  |
-| Typing indicators (see them)                             | done    | F14                                                  |
-| Disappearing messages (expire on time)                   | done    |                                                      |
-| View-once media                                          | missing |                                                      |
-| Contact cards (view)                                     | missing |                                                      |
-| Payments, gift badges                                    | missing |                                                      |
-| Message details (per-recipient delivery)                 | missing |                                                      |
-| Edit history                                             | missing |                                                      |
-| Chat header: details, members, safety number             | partial | F16: details and members; safety number missing      |
-| Per-chat settings: timer, mute, block, colors, nickname  | partial | F15: timer, mute, block; colors and nickname missing |
-| Media, files and links gallery                           | missing |                                                      |
-| Search inside a chat                                     | done    | F17                                                  |
-| Group management (add/remove, admins, link, name, photo) | done    | F21: also requests, invites, permissions, leave      |
-| Poll-ended and other system notices                      | partial |                                                      |
-| Stories (view, post, reply)                              | missing |                                                      |
-| Calls (voice, video, group, call links)                  | missing | needs a microphone and camera path into Signal       |
+| Feature                                                  | Status    | Notes                                                |
+| -------------------------------------------------------- | --------- | ---------------------------------------------------- |
+| Messages, author names and colors, member labels         | done      | F1                                                   |
+| Reactions, who reacted                                   | done      | F1, viewer                                           |
+| Quoted replies, jump to the original                     | done      | F1, F13                                              |
+| Edit and delete (for me, for everyone)                   | done      | F3                                                   |
+| Photos, videos, GIFs, files, voice notes (play)          | done      | F2                                                   |
+| Long messages                                            | done      |                                                      |
+| Polls (vote, end, create, send to many chats)            | done      | F6                                                   |
+| Stickers (view and send)                                 | done      | F10                                                  |
+| Link previews (view)                                     | done      |                                                      |
+| Mark read as you read, clears "mark as unread"           | done      | F13                                                  |
+| Unread line, jump-to-newest button with count            | done      | F18                                                  |
+| Typing indicators (see them)                             | done      | F14                                                  |
+| Disappearing messages (expire on time)                   | done      |                                                      |
+| View-once media                                          | missing   |                                                      |
+| Contact cards (view)                                     | missing   |                                                      |
+| Payments, gift badges                                    | missing   |                                                      |
+| Message details (per-recipient delivery)                 | missing   |                                                      |
+| Edit history                                             | missing   |                                                      |
+| Chat header: details, members, safety number             | partial   | F16: details and members; safety number missing      |
+| Contact card from a group member's photo or name         | done      | F23: About and Message                               |
+| Reply privately to a group message                       | different | F23: beyond Signal; links both ways on this page     |
+| Per-chat settings: timer, mute, block, colors, nickname  | partial   | F15: timer, mute, block; colors and nickname missing |
+| Media, files and links gallery                           | missing   |                                                      |
+| Search inside a chat                                     | done      | F17                                                  |
+| Group management (add/remove, admins, link, name, photo) | done      | F21: also requests, invites, permissions, leave      |
+| Poll-ended and other system notices                      | partial   |                                                      |
+| Stories (view, post, reply)                              | missing   |                                                      |
+| Calls (voice, video, group, call links)                  | missing   | needs a microphone and camera path into Signal       |
 
 ## Composer
 

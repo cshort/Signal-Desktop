@@ -63,7 +63,7 @@ Photos, member labels, reactions and replies use fork-only bridge additions
 on `messages.list`, `voiceNote` on `attachments.uploadBegin`,
 `contacts.list`, `conversations.find`, `conversations.open` and
 `groups.create` (`conversations.create`), `groups.update`
-(`groups.manage`) and
+(`groups.manage`), `messages.locateQuote` and
 `attachmentUploadIds` on
 `messages.sendText`, and pin order, formatting and link previews on the
 DTOs),

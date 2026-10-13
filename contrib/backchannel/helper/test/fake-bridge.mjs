@@ -112,6 +112,23 @@ export class FakeBridge {
   stickers = { packs: [], recents: [] };
   // conversationId -> ConversationDetailsDTO
   details = new Map();
+  #quoteOf(messageId) {
+    for (const list of this.messages.values()) {
+      const quoted = list.find(m => m.id === messageId);
+      if (quoted) {
+        return {
+          authorConversationId: quoted.authorConversationId,
+          author: quoted.author,
+          sentAt: quoted.sentAt,
+          text: quoted.body,
+        };
+      }
+    }
+    return null;
+  }
+
+  // messages.locateQuote: messageId -> { conversationId, messageId }
+  quoteLocations = new Map();
   // messages.list page size; unset returns everything at once.
   pageSize = 0;
   settings = {
@@ -470,7 +487,9 @@ export class FakeBridge {
           read: null,
           sendStatus: 'sending',
           authorConversationId: null,
+          quote: this.#quoteOf(params.quoteMessageId),
         });
+        this.messages.get(params.conversationId)?.push(message);
         this.#reply(session, id, { message });
         return;
       }
@@ -545,6 +564,15 @@ export class FakeBridge {
         this.conversations.push(conversation);
         this.messages.set(conversation.id, []);
         this.#reply(session, id, { conversation });
+        return;
+      }
+      case 'messages.locateQuote': {
+        const found = this.quoteLocations.get(params.messageId);
+        if (!found) {
+          this.#error(session, id, 'NOT_FOUND', undefined);
+          return;
+        }
+        this.#reply(session, id, found);
         return;
       }
       case 'conversations.getDetails': {

@@ -41,6 +41,7 @@ import {
   endpointFor,
 } from './bridge.mjs';
 import { largeEmojiFontLoader } from './fonts.mjs';
+import { PrivateReplies } from './privateReplies.mjs';
 import { allowedOrigins, createWebServer } from './server.mjs';
 import { Store } from './store.mjs';
 
@@ -178,6 +179,7 @@ web = createWebServer({
   }),
   store,
   bridge,
+  privateReplies: new PrivateReplies(join(configDir, 'private-replies.json')),
   log,
 });
 

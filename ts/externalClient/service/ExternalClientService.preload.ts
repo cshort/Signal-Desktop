@@ -39,6 +39,7 @@ import {
 import { updateConversation } from './ExternalClientChats.preload.ts';
 import { getDetails } from './ExternalClientDetails.preload.ts';
 import { updateGroup } from './ExternalClientGroups.preload.ts';
+import { locateQuote } from './ExternalClientQuotes.preload.ts';
 import { searchMessages } from './ExternalClientSearch.preload.ts';
 import {
   createGroup,
@@ -436,6 +437,10 @@ async function dispatch(
       }
       const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
       return params.success ? createGroup(params.data) : invalid;
+    }
+    case Method.MessagesLocateQuote: {
+      const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
+      return params.success ? locateQuote(params.data) : invalid;
     }
     case Method.GroupsUpdate: {
       if (!window.ConversationController.isInitialFetchComplete()) {

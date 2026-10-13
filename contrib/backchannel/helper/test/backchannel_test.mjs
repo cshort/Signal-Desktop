@@ -784,6 +784,54 @@ describe('backchannel helper', () => {
     assert.deepEqual(call.params, { name: 'Book club', memberIds: ['k1'] });
   });
 
+  it('remembers private replies and finds quoted messages', async () => {
+    let res = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/send`,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conversationId: 'c1',
+        body: 'about that',
+        quoteMessageId: 'g-msg',
+        privateReplyFrom: 'g1',
+      }),
+    });
+    assert.equal(res.status, 200);
+    const sent = JSON.parse(res.text).message;
+    const call = bridge.calls.findLast(c => c.method === 'messages.sendText');
+    assert.equal(call.params.privateReplyFrom, undefined);
+    assert.equal(call.params.quoteMessageId, 'g-msg');
+    for (const conversationId of ['g1', 'c1']) {
+      res = await http(port, {
+        path: `/${helper.token}/api/privateReplies?conversationId=${conversationId}`,
+      });
+      assert.deepEqual(JSON.parse(res.text).links, [
+        {
+          groupConversationId: 'g1',
+          groupMessageId: 'g-msg',
+          dmConversationId: 'c1',
+          replyMessageId: sent.id,
+        },
+      ]);
+    }
+    res = await http(port, {
+      path: `/${helper.token}/api/privateReplies?conversationId=other`,
+    });
+    assert.deepEqual(JSON.parse(res.text).links, []);
+
+    bridge.quoteLocations.set(sent.id, {
+      conversationId: 'g1',
+      messageId: 'g-msg',
+    });
+    res = await http(port, {
+      path: `/${helper.token}/api/locateQuote?messageId=${sent.id}`,
+    });
+    assert.deepEqual(JSON.parse(res.text), {
+      conversationId: 'g1',
+      messageId: 'g-msg',
+    });
+  });
+
   it('changes groups', async () => {
     let res = await http(port, {
       method: 'POST',

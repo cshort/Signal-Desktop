@@ -167,6 +167,7 @@ export const Method = {
   ConversationsOpen: 'conversations.open',
   GroupsCreate: 'groups.create',
   GroupsUpdate: 'groups.update',
+  MessagesLocateQuote: 'messages.locateQuote',
 } as const;
 export type MethodType = (typeof Method)[keyof typeof Method];
 
@@ -212,6 +213,7 @@ export const SERVICE_METHOD_CAPABILITIES = {
   [Method.ConversationsOpen]: Capability.ConversationsCreate,
   [Method.GroupsCreate]: Capability.ConversationsCreate,
   [Method.GroupsUpdate]: Capability.GroupsManage,
+  [Method.MessagesLocateQuote]: Capability.MessagesRead,
 } as const satisfies Partial<Record<MethodType, CapabilityType>>;
 export type ServiceMethodType = keyof typeof SERVICE_METHOD_CAPABILITIES;
 
@@ -429,6 +431,18 @@ export const messagesGetParamsSchema = z
     messageId: messageIdSchema,
   })
   .strict();
+
+// Fork addition (decision F23): where the message a reply quotes is. In
+// this chat as Signal finds it, or, for "Reply privately", in a group the
+// quoted person and the user are both in.
+export const messagesLocateQuoteParamsSchema = messagesGetParamsSchema;
+export type MessagesLocateQuoteParamsType = z.infer<
+  typeof messagesLocateQuoteParamsSchema
+>;
+export type MessagesLocateQuoteResultType = Readonly<{
+  conversationId: string;
+  messageId: string;
+}>;
 
 const eventTopicSchema = z.enum(
   ALL_EVENT_TOPICS as [EventTopicType, ...Array<EventTopicType>]
@@ -1412,6 +1426,7 @@ export const SERVICE_PARAM_SCHEMAS = {
   [Method.ConversationsOpen]: conversationsOpenParamsSchema,
   [Method.GroupsCreate]: groupsCreateParamsSchema,
   [Method.GroupsUpdate]: groupsUpdateParamsSchema,
+  [Method.MessagesLocateQuote]: messagesLocateQuoteParamsSchema,
 } as const satisfies Record<ServiceMethodType, z.ZodType>;
 
 export type ConversationsListParamsType = z.infer<

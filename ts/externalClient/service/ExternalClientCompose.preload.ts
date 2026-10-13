@@ -26,7 +26,10 @@ import type {
 } from '../protocol.std.ts';
 import { ErrorCode, MAX_GROUP_NAME_GRAPHEMES } from '../protocol.std.ts';
 import { toAvatarBytes } from './ExternalClientProfile.preload.ts';
-import { markConversationOpened } from './serviceHelpers.preload.ts';
+import {
+  getGroupMemberContact,
+  markConversationOpened,
+} from './serviceHelpers.preload.ts';
 
 // Fork addition: Signal's compose button for external clients (decision
 // F20): the "New chat" list, finding people by username or phone number,
@@ -84,15 +87,17 @@ function opened(conversationId: string): ServiceResultType {
   return { ok: true, value };
 }
 
-// Contacts and groups Signal's composer would offer; nothing else, so this
-// can't reach conversations Signal hides.
+// Contacts and groups Signal's composer would offer, and people in a group
+// the client can see (Signal's contact card "Message", decision F23);
+// nothing else, so this can't reach conversations Signal hides.
 export function openConversation({
   conversationId,
 }: ConversationsOpenParamsType): ServiceResultType {
   const state = window.reduxStore.getState();
   const offered =
     getComposableContacts(state).some(c => c.id === conversationId) ||
-    state.conversations.conversationLookup[conversationId]?.type === 'group';
+    state.conversations.conversationLookup[conversationId]?.type === 'group' ||
+    getGroupMemberContact(conversationId) !== undefined;
   if (!offered) {
     return { ok: false, code: ErrorCode.NotFound };
   }

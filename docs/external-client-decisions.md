@@ -706,3 +706,33 @@ again for capabilities it already granted.
 
 WHY: Mike's call on the name, from a short list; publishing the kit for
 others.
+
+## F23. Fork only: contact cards and "Reply privately"
+
+DECISION: In a group, clicking a sender's photo or name opens their card
+(the details dialog's About, as Signal's contact modal) with a Message
+button. `conversations.getDetails` and `conversations.open` now also take
+a person who is in a group the client can see, even with no chat yet, so
+Message opens or starts the chat (Signal's contact modal does the same).
+
+"Reply privately" (Mike, 2026-10-13; Signal has no such option, people
+forward or copy instead) is in a group message's menu for messages from
+others. It opens the direct chat with the sender and quotes the group
+message. `messages.sendText` accepts that one cross-chat quote: the quoted
+message must be an incoming message in a group the client can see, sent by
+the person the direct chat is with. Signal sends it as an ordinary quote
+(author, sent time, text), so the other person's Signal shows the quoted
+text with "Original message not found", since Signal only links quotes
+within one chat.
+
+On this page it links both ways. The helper remembers each private reply
+sent from the page (`private-replies.json` in its config folder: group
+chat and message, direct chat and reply, nothing else), so the reply's
+quote says "Replied privately from <group>" and jumps to the group
+message, and the group message shows "You replied privately", which jumps
+to the reply. For quotes it didn't record, a new `messages.locateQuote
+{messageId}` (needs `messages.read`) asks Signal where the quoted message
+is: in the same chat, or in a group the client can see.
+
+WHY: Mike's request; it only works for members of the group, which the
+checks above enforce.

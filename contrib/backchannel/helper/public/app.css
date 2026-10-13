@@ -3318,3 +3318,40 @@ label.poll-option {
   font: inherit;
   font-size: 15px;
 }
+
+/* Reply privately and contact cards (F23). */
+.msg .avatar.clickable,
+.bubble .author.clickable {
+  cursor: pointer;
+}
+
+.bubble .author.clickable:hover .name {
+  text-decoration: underline;
+}
+
+.quote-from {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.private-link {
+  align-self: flex-start;
+  margin: 2px 0 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.msg.out .private-link {
+  align-self: flex-end;
+}
+
+.private-link:hover {
+  text-decoration: underline;
+}

@@ -42,6 +42,34 @@ export function getListedConversation(
     : undefined;
 }
 
+// Fork addition (F23): a person in a group the client can see, as
+// Signal's contact card from a group offers them (their About, and
+// "Message"), even when there is no chat with them yet.
+export function getGroupMemberContact(
+  conversationId: string
+): ConversationModel | undefined {
+  const model = window.ConversationController.get(conversationId);
+  if (
+    !model ||
+    model.id !== conversationId ||
+    model.get('type') !== 'private'
+  ) {
+    return undefined;
+  }
+  const aci = model.getAci();
+  if (!aci) {
+    return undefined;
+  }
+  const { conversationLookup } = window.reduxStore.getState().conversations;
+  const inGroup = Object.values(conversationLookup).some(
+    conversation =>
+      conversation.type === 'group' &&
+      conversation.memberships?.some(member => member.aci === aci) &&
+      getListedConversation(conversation.id) !== undefined
+  );
+  return inGroup ? model : undefined;
+}
+
 // Fork addition (F20): chats opened from Signal's compose button, which act
 // as listed before their first message, as an open chat does in Signal.
 const openedConversationIds = new Set<string>();

@@ -209,6 +209,7 @@ export function createWebServer({
   getLargeEmojiFont = async () => null,
   store,
   bridge,
+  privateReplies = null,
   log,
 }) {
   const streams = new Set();
@@ -747,6 +748,7 @@ export function createWebServer({
         attachmentUploadIds,
         mentions,
         formatting,
+        privateReplyFrom,
       } = await readJson(req);
       const result = await bridge.call('messages.sendText', {
         conversationId,
@@ -756,7 +758,37 @@ export function createWebServer({
         ...(formatting?.length ? { formatting } : {}),
         ...(attachmentUploadIds?.length ? { attachmentUploadIds } : {}),
       });
+      // "Reply privately": remember the link for the page (decision F23).
+      if (
+        privateReplies &&
+        typeof privateReplyFrom === 'string' &&
+        quoteMessageId &&
+        result.message?.id
+      ) {
+        privateReplies.add({
+          groupConversationId: privateReplyFrom,
+          groupMessageId: quoteMessageId,
+          dmConversationId: conversationId,
+          replyMessageId: result.message.id,
+        });
+      }
       sendJson(res, 200, result);
+      return;
+    }
+    if (req.method === 'GET' && route === 'api/privateReplies') {
+      const conversationId = url.searchParams.get('conversationId') ?? '';
+      sendJson(res, 200, {
+        links: privateReplies?.forConversation(conversationId) ?? [],
+      });
+      return;
+    }
+    if (req.method === 'GET' && route === 'api/locateQuote') {
+      const messageId = url.searchParams.get('messageId') ?? '';
+      sendJson(
+        res,
+        200,
+        await bridge.call('messages.locateQuote', { messageId })
+      );
       return;
     }
     if (req.method === 'POST' && route === 'api/upload') {

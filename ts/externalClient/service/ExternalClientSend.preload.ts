@@ -122,6 +122,23 @@ export async function getSendBlockReason(
   return undefined;
 }
 
+function isPrivateReply(
+  quoted: MessageAttributesType,
+  model: ConversationModel
+): boolean {
+  if (model.get('type') !== 'private') {
+    return false;
+  }
+  const group = getListedConversation(quoted.conversationId);
+  const aci = model.getAci();
+  return (
+    group?.get('type') === 'group' &&
+    aci !== undefined &&
+    quoted.type === 'incoming' &&
+    quoted.sourceServiceId === aci
+  );
+}
+
 export async function sendText({
   conversationId,
   body,
@@ -136,14 +153,17 @@ export async function sendText({
   }
 
   // Fork addition: replies. The quoted message must be one the client could
-  // read in this conversation, as the timeline's Reply would offer it.
+  // read in this conversation, as the timeline's Reply would offer it, or
+  // (decision F23, "Reply privately") a message this person sent in a group
+  // the client can read, quoted in the direct chat with them.
   let quoted: MessageAttributesType | undefined;
   if (quoteMessageId !== undefined) {
     quoted = await loadMessage(quoteMessageId);
     const quotedDto = quoted ? toMessageDTO(quoted, getDtoContext()) : null;
     if (
       !quoted ||
-      quoted.conversationId !== conversationId ||
+      (quoted.conversationId !== conversationId &&
+        !isPrivateReply(quoted, model)) ||
       !quotedDto ||
       quotedDto.kind === 'deleted' ||
       quotedDto.kind === 'unsupported'
