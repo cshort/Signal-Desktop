@@ -17,8 +17,9 @@ else from you (no signal-cli or REST API).
 
 ## Quick start
 
-You need Docker with Compose, several GB of free disk for the build, and
-your phone with Signal on it.
+You need an x86-64 Linux host with Docker and Compose (ARM hosts such as a
+Raspberry Pi or an Apple Silicon Mac are untested), several GB of free disk
+for the build, and your phone with Signal on it.
 
 1. Get the code and make a data folder:
 
