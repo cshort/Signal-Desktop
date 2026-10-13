@@ -25,6 +25,12 @@ let nextCursor = null;
 // messages aren't loaded, and this pages toward them.
 let newerCursor = null;
 let loadingNewer = false;
+// Signal's "N unread messages" line, placed when the chat is opened:
+// { messageId, count }.
+let unreadLine = null;
+let unreadLineEl = null;
+// While a chat is opening, before it's scrolled to where it opens.
+let opening = false;
 let bridgeState = 'offline';
 let helperConnected = false;
 let markReadInFlight = false;
@@ -157,6 +163,7 @@ const ICONS = {
   settings:
     'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z',
   back: 'M15 5l-7 7 7 7',
+  down: 'M12 5v14M5 12l7 7 7-7',
   bell: 'M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0',
   check: 'M5 12.5l4.5 4.5L19 7.5',
   timer: 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM12 9v4l2.5 2M10 2h4',
@@ -1622,6 +1629,79 @@ function patchChildren(parent, wanted) {
   }
 }
 
+function unreadLineNode() {
+  if (!unreadLineEl) {
+    const { count } = unreadLine;
+    unreadLineEl = el('li', 'unread-line');
+    unreadLineEl.setAttribute('role', 'separator');
+    unreadLineEl.append(
+      el(
+        'span',
+        '',
+        count === 1 ? '1 Unread Message' : `${count} Unread Messages`
+      )
+    );
+  }
+  return unreadLineEl;
+}
+
+function nearBottom() {
+  const box = $('messages');
+  return box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+}
+
+// Signal's button for going back down to the newest message, with the
+// chat's unread count.
+function renderToNewest() {
+  const c = conversations.get(selectedId);
+  const button = $('to-newest');
+  button.hidden =
+    !c || $('messages').hidden || (newerCursor === null && nearBottom());
+  // Just above whatever is under the messages (composer, request bar).
+  const box = $('messages');
+  button.style.bottom = `${
+    $('chat').clientHeight - (box.offsetTop + box.offsetHeight) + 16
+  }px`;
+  const unread = c?.unreadCount ?? 0;
+  const badge = button.querySelector('.badge');
+  badge.hidden = unread === 0;
+  badge.textContent = String(unread);
+}
+
+async function goToNewest() {
+  if (newerCursor !== null) {
+    await showLatest();
+  } else {
+    const box = $('messages');
+    box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
+  }
+}
+
+// Opening a chat with unread messages: load back to the oldest unread one
+// and put Signal's line above it.
+async function placeUnreadLine(count) {
+  const conversationId = selectedId;
+  const unreadLoaded = () =>
+    sortedMessages().filter(m => m.direction === 'incoming' && m.read === false)
+      .length;
+  for (
+    let page = 0;
+    unreadLoaded() < count && nextCursor && page < 20;
+    page++
+  ) {
+    // oxlint-disable-next-line no-await-in-loop
+    await loadMessages({ older: true });
+    if (conversationId !== selectedId) {
+      return;
+    }
+  }
+  const oldest = sortedMessages().find(
+    m => m.direction === 'incoming' && m.read === false
+  );
+  unreadLine = oldest ? { messageId: oldest.id, count } : null;
+  unreadLineEl = null;
+}
+
 function renderMessages({ keepBottom = true, appended = false } = {}) {
   const box = $('messages');
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
@@ -1629,7 +1709,10 @@ function renderMessages({ keepBottom = true, appended = false } = {}) {
   const list = sortedMessages();
   patchChildren(
     $('message-list'),
-    list.map((m, i) => cachedMessage(m, list[i - 1], list[i + 1]))
+    list.flatMap((m, i) => {
+      const li = cachedMessage(m, list[i - 1], list[i + 1]);
+      return m.id === unreadLine?.messageId ? [unreadLineNode(), li] : [li];
+    })
   );
   for (const id of messageCache.keys()) {
     if (!messages.has(id)) {
@@ -1638,6 +1721,7 @@ function renderMessages({ keepBottom = true, appended = false } = {}) {
   }
   $('older').hidden = !nextCursor;
   $('newer').hidden = newerCursor === null;
+  renderToNewest();
   if (appended) {
     // Newer messages went in below; the view stays where it is.
   } else if (keepBottom && atBottom) {
@@ -1970,9 +2054,12 @@ function closeConversation() {
   messages = new Map();
   nextCursor = null;
   newerCursor = null;
+  unreadLine = null;
+  unreadLineEl = null;
   closePopovers();
   cancelReply();
   $('chat-head').hidden = true;
+  $('to-newest').hidden = true;
   $('messages').hidden = true;
   $('composer').hidden = true;
   $('request-bar').hidden = true;
@@ -2249,6 +2336,7 @@ function renderChatHeader() {
   }
   $('chat-sub').textContent = sub.join(' · ');
   renderRequestBar();
+  renderToNewest();
 }
 
 async function selectConversation(id) {
@@ -2259,6 +2347,8 @@ async function selectConversation(id) {
   messages = new Map();
   nextCursor = null;
   newerCursor = null;
+  unreadLine = null;
+  unreadLineEl = null;
   collapseSidebar();
   renderDrafts();
   clearExpiryTimers();
@@ -2274,11 +2364,34 @@ async function selectConversation(id) {
   renderChatHeader();
   renderConversations();
   $('message-list').replaceChildren();
+  opening = true;
   try {
     await loadMessages();
-    $('messages').scrollTop = $('messages').scrollHeight;
+    const unread = conversations.get(id)?.unreadCount ?? 0;
+    if (unread > 0) {
+      await placeUnreadLine(unread);
+    }
+    if (id !== selectedId) {
+      return;
+    }
+    renderMessages();
+    // As Signal: open at the first unread message, else at the newest.
+    if (unreadLine && unreadLineEl) {
+      const box = $('messages');
+      box.scrollTop +=
+        unreadLineEl.getBoundingClientRect().top -
+        box.getBoundingClientRect().top -
+        8;
+    } else {
+      $('messages').scrollTop = $('messages').scrollHeight;
+    }
+    renderToNewest();
   } catch (error) {
     showError(`Couldn't load messages (${error.code ?? error.message}).`);
+  } finally {
+    if (id === selectedId) {
+      opening = false;
+    }
   }
   renderTyping();
   focusCompose();
@@ -2294,8 +2407,11 @@ async function maybeMarkRead() {
   }
   if (
     !c ||
+    opening ||
     // After a jump, until the newest messages are loaded.
     newerCursor !== null ||
+    // As Signal: only once you've scrolled down to the newest message.
+    !nearBottom() ||
     document.visibilityState !== 'visible' ||
     !document.hasFocus() ||
     !(c.unreadCount > 0 || c.markedUnread)
@@ -5449,6 +5565,8 @@ $('compose').addEventListener('keydown', e => {
 });
 $('older').addEventListener('click', () => loadMessages({ older: true }));
 $('newer-load').addEventListener('click', loadNewer);
+$('to-newest').prepend(icon('down'));
+$('to-newest').addEventListener('click', goToNewest);
 $('latest').addEventListener('click', showLatest);
 $('search').addEventListener('input', () => {
   scheduleSearch();
@@ -5502,6 +5620,7 @@ $('messages').addEventListener(
   'scroll',
   () => {
     const box = $('messages');
+    renderToNewest();
     if (box.scrollHeight - box.scrollTop - box.clientHeight < 80) {
       if (newerCursor === null) {
         maybeMarkRead();

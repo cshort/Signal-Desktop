@@ -42,6 +42,7 @@ Last reviewed: 2026-10-13, against the Signal release in fork main.
 | Stickers (view and send)                                 | done    | F10                                                  |
 | Link previews (view)                                     | done    |                                                      |
 | Mark read as you read, clears "mark as unread"           | done    | F13                                                  |
+| Unread line, jump-to-newest button with count            | done    | F18                                                  |
 | Typing indicators (see them)                             | done    | F14                                                  |
 | Disappearing messages (expire on time)                   | done    |                                                      |
 | View-once media                                          | missing |                                                      |

@@ -3019,3 +3019,44 @@ label.poll-option {
     display: none;
   }
 }
+
+/* Signal's unread line, above the first unread message when the chat
+   opens, and its button down to the newest message. */
+.unread-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.unread-line::before,
+.unread-line::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
+.to-newest {
+  position: absolute;
+  right: 20px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 20%);
+  cursor: pointer;
+}
+
+.to-newest .badge {
+  position: absolute;
+  top: -8px;
+  right: -4px;
+}

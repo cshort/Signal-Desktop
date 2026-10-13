@@ -584,3 +584,17 @@ messages around it; scrolling down loads newer ones, and sending goes back
 to the newest. The chat menu has "Search in chat".
 
 WHY: The fourth gap on Mike's standing parity rule (2026-10-13).
+
+## F18. Fork only: the unread line
+
+DECISION: Page only, from what the bridge already gives (`unreadCount`,
+`read` on incoming messages). Opening a chat with unread messages loads
+back to the oldest unread one (up to 20 pages), puts Signal's "N Unread
+Messages" line above it and opens there; the line stays until the chat is
+opened again. The chat is marked read only once you've scrolled down to
+the newest message (Signal's rule), not on opening. Signal's round button
+down to the newest message, with the unread count, shows whenever you're
+scrolled up.
+
+WHY: Mike, 2026-10-13 09:42 PT: "when you go into a chat / thread, it puts
+a line before the first unread message, so you know where to start."
