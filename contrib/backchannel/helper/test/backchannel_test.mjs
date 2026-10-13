@@ -1086,6 +1086,22 @@ describe('backchannel helper', () => {
       packId: 'abcd',
       stickerId: 0,
     });
+
+    await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/sendSticker`,
+      headers: json,
+      body: {
+        conversationId: alice.id,
+        packId: 'abcd',
+        stickerId: 0,
+        quoteMessageId: 'm1',
+      },
+    });
+    const reply = bridge.calls.findLast(
+      c => c.method === 'messages.sendSticker'
+    );
+    assert.equal(reply.params.quoteMessageId, 'm1');
   });
 
   it('passes formatting on sends and edits', async () => {

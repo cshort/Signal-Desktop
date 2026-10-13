@@ -4579,7 +4579,18 @@ async function sendSticker(packId, stickerId) {
   closePopovers();
   $('send-error').hidden = true;
   try {
-    await api('api/sendSticker', { conversationId, packId, stickerId });
+    // A pending reply goes with the sticker, as Signal's composer does
+    // behind its sticker-reply switch.
+    const quote = replyTo && !editing ? replyTo : null;
+    await api('api/sendSticker', {
+      conversationId,
+      packId,
+      stickerId,
+      ...(quote ? { quoteMessageId: quote.id } : {}),
+    });
+    if (quote && replyTo === quote) {
+      cancelReply();
+    }
     $('messages').scrollTop = $('messages').scrollHeight;
   } catch (error) {
     showError(

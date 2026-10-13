@@ -947,6 +947,9 @@ export const messagesSendStickerParamsSchema = z
     conversationId: conversationIdSchema,
     packId: stickerPackIdSchema,
     stickerId: stickerIdSchema,
+    // Fork addition: a sticker reply, quoting this message as
+    // messages.sendText does (decision F28).
+    quoteMessageId: messageIdSchema.optional(),
   })
   .strict();
 export type MessagesSendStickerParamsType = z.infer<

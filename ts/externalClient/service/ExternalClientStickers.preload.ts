@@ -8,6 +8,7 @@ import {
 } from '../../state/selectors/stickers.std.ts';
 import * as Errors from '../../types/errors.std.ts';
 import { getSticker, getStickerPack } from '../../types/Stickers.preload.ts';
+import { makeQuote } from '../../util/makeQuote.preload.ts';
 import {
   AttachmentDisposition,
   getLocalAttachmentUrl,
@@ -21,7 +22,10 @@ import type {
 } from '../protocol.std.ts';
 import { ErrorCode } from '../protocol.std.ts';
 import { renderImage } from './ExternalClientExtras.preload.ts';
-import { getSendBlockReason } from './ExternalClientSend.preload.ts';
+import {
+  findQuotable,
+  getSendBlockReason,
+} from './ExternalClientSend.preload.ts';
 import { getListedConversation } from './serviceHelpers.preload.ts';
 
 // Fork addition: Signal's sticker picker for external clients (decision F10).
@@ -112,6 +116,7 @@ export async function sendSticker({
   conversationId,
   packId,
   stickerId,
+  quoteMessageId,
 }: MessagesSendStickerParamsType): Promise<ServiceResultType> {
   const model = getListedConversation(conversationId);
   if (!model) {
@@ -120,11 +125,21 @@ export async function sendSticker({
   if (!findPickerSticker(packId, stickerId, { allowCover: false })) {
     return { ok: false, code: ErrorCode.InvalidArgument };
   }
+  // Sticker replies (decision F28): Signal's own composer does this behind
+  // its desktop.stickerReply.send flag, with the same quote.
+  const quoted = await findQuotable(quoteMessageId, model);
+  if (quoted === 'invalid') {
+    return { ok: false, code: ErrorCode.InvalidArgument };
+  }
   const reason = await getSendBlockReason(model, '');
   if (reason) {
     log.info(`sendSticker: refused (${reason})`);
     return { ok: false, code: ErrorCode.PreconditionFailed, reason };
   }
-  await model.sendStickerMessage(packId, stickerId);
+  await model.sendStickerMessage(
+    packId,
+    stickerId,
+    quoted ? { quote: await makeQuote(quoted) } : undefined
+  );
   return { ok: true, value: {} };
 }

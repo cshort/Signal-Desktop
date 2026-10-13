@@ -490,11 +490,13 @@ export function createWebServer({
       return;
     }
     if (req.method === 'POST' && route === 'api/sendSticker') {
-      const { conversationId, packId, stickerId } = await readJson(req);
+      const { conversationId, packId, stickerId, quoteMessageId } =
+        await readJson(req);
       const result = await bridge.call('messages.sendSticker', {
         conversationId,
         packId,
         stickerId,
+        ...(quoteMessageId ? { quoteMessageId } : {}),
       });
       sendJson(res, 200, result);
       return;

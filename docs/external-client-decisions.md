@@ -789,3 +789,15 @@ above the message box with an × that skips that link.
 
 WHY: Mike noticed links went out bare (2026-10-13 13:11 PT). In Signal the
 sender attaches the preview; recipients never build one.
+
+## F28. Fork only: sticker replies
+
+DECISION: `messages.sendSticker` takes an optional `quoteMessageId`, checked
+like `messages.sendText`'s (same chat, or "Reply privately"), and passes the
+quote to `sendStickerMessage`, as Signal's composer does behind its
+`desktop.stickerReply.send` remote flag. On the page, picking a sticker
+while a reply is pending sends it as the reply.
+
+WHY: Mike asked (2026-10-13 13:23 PT). Signal hasn't turned the flag on,
+so some recipients' apps may show the sticker without the quote until it
+does.

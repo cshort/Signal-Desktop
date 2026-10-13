@@ -70,7 +70,7 @@ Last reviewed: 2026-10-13, against the Signal release in fork main.
 | Emoji picker with skin tones                    | done      | F5, F11              |
 | Attach files, paste and drop images             | done      | F4                   |
 | Forward to any number of chats                  | different | F4: no limit of five |
-| Stickers                                        | done      | F10                  |
+| Stickers, also as replies                       | done      | F10, F28             |
 | Send link previews                              | done      | F27                  |
 | Record voice notes                              | done      | F19                  |
 | Send contact cards                              | missing   |                      |

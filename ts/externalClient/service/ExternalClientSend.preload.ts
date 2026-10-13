@@ -140,6 +140,31 @@ function isPrivateReply(
   );
 }
 
+// Fork addition: replies. The quoted message must be one the client could
+// read in this conversation, as the timeline's Reply would offer it, or
+// (decision F23, "Reply privately") a message this person sent in a group
+// the client can read, quoted in the direct chat with them.
+export async function findQuotable(
+  quoteMessageId: string | undefined,
+  model: ConversationModel
+): Promise<MessageAttributesType | undefined | 'invalid'> {
+  if (quoteMessageId === undefined) {
+    return undefined;
+  }
+  const quoted = await loadMessage(quoteMessageId);
+  const quotedDto = quoted ? toMessageDTO(quoted, getDtoContext()) : null;
+  if (
+    !quoted ||
+    (quoted.conversationId !== model.id && !isPrivateReply(quoted, model)) ||
+    !quotedDto ||
+    quotedDto.kind === 'deleted' ||
+    quotedDto.kind === 'unsupported'
+  ) {
+    return 'invalid';
+  }
+  return quoted;
+}
+
 export async function sendText({
   conversationId,
   body,
@@ -154,24 +179,9 @@ export async function sendText({
     return { ok: false, code: ErrorCode.NotFound };
   }
 
-  // Fork addition: replies. The quoted message must be one the client could
-  // read in this conversation, as the timeline's Reply would offer it, or
-  // (decision F23, "Reply privately") a message this person sent in a group
-  // the client can read, quoted in the direct chat with them.
-  let quoted: MessageAttributesType | undefined;
-  if (quoteMessageId !== undefined) {
-    quoted = await loadMessage(quoteMessageId);
-    const quotedDto = quoted ? toMessageDTO(quoted, getDtoContext()) : null;
-    if (
-      !quoted ||
-      (quoted.conversationId !== conversationId &&
-        !isPrivateReply(quoted, model)) ||
-      !quotedDto ||
-      quotedDto.kind === 'deleted' ||
-      quotedDto.kind === 'unsupported'
-    ) {
-      return { ok: false, code: ErrorCode.InvalidArgument };
-    }
+  const quoted = await findQuotable(quoteMessageId, model);
+  if (quoted === 'invalid') {
+    return { ok: false, code: ErrorCode.InvalidArgument };
   }
 
   // Fork addition: attachments, from finished uploads.
