@@ -3410,6 +3410,8 @@ async function selectConversation(id) {
   clearExpiryTimers();
   closePopovers();
   cancelReply();
+  resetLinkPreview();
+  scheduleLinkPreview();
   // Mentions name members of the chat they were typed in.
   dropComposeMentions();
   $('send-error').hidden = true;
@@ -5120,7 +5122,11 @@ async function sendCurrent() {
         ? { privateReplyFrom: replyTo.privateFrom }
         : {}),
       ...(attachmentUploadIds.length > 0 ? { attachmentUploadIds } : {}),
+      ...(composePreview?.url && attachmentUploadIds.length === 0
+        ? { linkPreviewUrl: composePreview.url }
+        : {}),
     });
+    resetLinkPreview();
     if (replyTo?.privateFrom) {
       addPrivateLink({
         groupConversationId: replyTo.privateFrom,
@@ -5459,6 +5465,7 @@ function setCompose(text, mentions = [], formatting = []) {
   }
   drawCompose(chars);
   composeSelection = null;
+  scheduleLinkPreview();
 }
 
 // Replaces start..end with the given characters, then puts the caret after.
@@ -5660,6 +5667,123 @@ function onComposeInput() {
   sendTyping(box.childNodes.length > 0);
   updateMentionPicker();
   updateFormatBar();
+  scheduleLinkPreview();
+}
+
+// --- link previews in the composer (Signal fetches them) ---------------------
+
+// { url, title, description, domain, image } once Signal has one for the
+// draft's first link; `loading` while it fetches.
+let composePreview = null;
+// Links whose preview the user removed, until the message is sent.
+let dismissedPreviews = new Set();
+let previewTimer = null;
+let previewSeq = 0;
+const URL_HINT = /https?:\/\/\S/i;
+
+function scheduleLinkPreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(updateLinkPreview, 300);
+}
+
+function resetLinkPreview() {
+  clearTimeout(previewTimer);
+  previewSeq += 1;
+  composePreview = null;
+  dismissedPreviews = new Set();
+  renderLinkPreviewBar();
+}
+
+async function updateLinkPreview() {
+  const seq = ++previewSeq;
+  const text = composeForSend().body;
+  // As Signal: no link preview with attachments, or while editing.
+  if (
+    !selectedId ||
+    editing ||
+    draftsFor(selectedId).length > 0 ||
+    !URL_HINT.test(text)
+  ) {
+    composePreview = null;
+    renderLinkPreviewBar();
+    return;
+  }
+  if (composePreview && text.includes(composePreview.url)) {
+    return;
+  }
+  composePreview = { loading: true };
+  renderLinkPreviewBar();
+  let preview = null;
+  try {
+    ({ preview } = await api('api/linkPreview', {
+      text,
+      exclude: [...dismissedPreviews],
+    }));
+  } catch {
+    preview = null;
+  }
+  if (seq !== previewSeq) {
+    return;
+  }
+  composePreview = preview;
+  renderLinkPreviewBar();
+}
+
+let previewImageUrl = null;
+
+function renderLinkPreviewBar() {
+  const bar = $('compose-preview');
+  const card = $('compose-preview-card');
+  if (previewImageUrl) {
+    URL.revokeObjectURL(previewImageUrl);
+    previewImageUrl = null;
+  }
+  bar.hidden = !composePreview;
+  if (!composePreview) {
+    card.replaceChildren();
+    return;
+  }
+  if (composePreview.loading) {
+    card.replaceChildren(
+      el('span', 'compose-preview-loading', 'Loading preview…')
+    );
+    return;
+  }
+  const p = composePreview;
+  const parts = [];
+  if (p.image) {
+    const img = el('img', 'compose-preview-image');
+    img.alt = '';
+    // The page's CSP allows blob: images, not data: ones.
+    const bytes = Uint8Array.from(atob(p.image.data), c => c.charCodeAt(0));
+    previewImageUrl = URL.createObjectURL(
+      new Blob([bytes], { type: p.image.contentType })
+    );
+    img.src = previewImageUrl;
+    parts.push(img);
+  }
+  const text = el('span', 'link-preview-text');
+  if (p.title) {
+    text.append(el('span', 'link-preview-title', p.title));
+  }
+  if (p.description) {
+    text.append(el('span', 'link-preview-description', p.description));
+  }
+  text.append(el('span', 'link-preview-domain', p.domain ?? p.url));
+  parts.push(text);
+  card.replaceChildren(...parts);
+}
+
+function dismissLinkPreview() {
+  if (composePreview?.url) {
+    dismissedPreviews.add(composePreview.url);
+  }
+  previewSeq += 1;
+  composePreview = null;
+  renderLinkPreviewBar();
+  // Signal then offers the next link in the message, if there is one.
+  scheduleLinkPreview();
+  focusCompose();
 }
 
 // --- voice notes (Signal's recorder) ------------------------------------------
@@ -6367,6 +6491,7 @@ function renderDrafts() {
       return tile;
     })
   );
+  scheduleLinkPreview();
 }
 
 async function uploadFile(file) {
@@ -7044,6 +7169,8 @@ $('banner-action').addEventListener('click', () =>
   api('api/retry', {}).catch(() => {})
 );
 $('reply-cancel').append(icon('close'));
+$('compose-preview-close').append(icon('close'));
+$('compose-preview-close').addEventListener('click', dismissLinkPreview);
 $('lightbox-close').append(icon('close'));
 $('lightbox-save').append(icon('download'));
 $('lightbox-close').addEventListener('click', closeLightbox);

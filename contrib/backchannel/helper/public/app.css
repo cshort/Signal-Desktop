@@ -1685,6 +1685,54 @@ button {
   opacity: 0.75;
 }
 
+/* The link preview Signal fetched for the draft, above the message box. */
+.compose-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px;
+  padding: 8px 0 0;
+}
+
+.compose-preview {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--hover);
+}
+
+.compose-preview .link-preview-text {
+  min-width: 0;
+}
+
+.compose-preview .link-preview-title,
+.compose-preview .link-preview-domain {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-preview .link-preview-description {
+  -webkit-line-clamp: 2;
+}
+
+.compose-preview-image {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+}
+
+.compose-preview-loading {
+  padding: 8px 10px;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
 /* Edit mode. */
 .reply-bar.editing .reply-quote {
   border-left-color: var(--accent);

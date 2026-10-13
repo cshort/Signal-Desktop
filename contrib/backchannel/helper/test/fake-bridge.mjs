@@ -139,6 +139,8 @@ export class FakeBridge {
     return null;
   }
 
+  // linkPreviews.fetch: url -> { title, description, domain, date, image }
+  linkPreviews = new Map();
   // messages.locateQuote: messageId -> { conversationId, messageId }
   quoteLocations = new Map();
   // messages.list page size; unset returns everything at once.
@@ -644,6 +646,18 @@ export class FakeBridge {
           ),
         });
         return;
+      case 'linkPreviews.fetch': {
+        const url = (params.text.match(/https:\/\/\S+/g) ?? []).find(
+          link => !(params.exclude ?? []).includes(link)
+        );
+        this.#reply(session, id, {
+          preview:
+            url && this.linkPreviews.has(url)
+              ? { url, ...this.linkPreviews.get(url) }
+              : null,
+        });
+        return;
+      }
       case 'attachments.download':
         this.#reply(session, id, {});
         return;

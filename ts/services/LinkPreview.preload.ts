@@ -308,7 +308,7 @@ export function sanitizeLinkPreview(
   return base;
 }
 
-async function getPreview(
+export async function getPreview(
   url: string,
   abortSignal: Readonly<AbortSignal>
 ): Promise<null | LinkPreviewResult> {

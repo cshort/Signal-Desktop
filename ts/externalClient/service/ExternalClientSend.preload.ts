@@ -19,6 +19,7 @@ import { makeQuote } from '../../util/makeQuote.preload.ts';
 import { isDirectConversation } from '../../util/whatTypeOfConversation.dom.ts';
 import type { ServiceResultType } from '../hostTypes.std.ts';
 import { toMessageDTO } from '../messageDto.std.ts';
+import { getLinkPreviewsForSend } from './ExternalClientLinkPreviews.preload.ts';
 import { toBodyRanges } from './ExternalClientMentions.preload.ts';
 import type {
   ConversationsSetTypingParamsType,
@@ -146,6 +147,7 @@ export async function sendText({
   attachmentUploadIds,
   mentions,
   formatting,
+  linkPreviewUrl,
 }: MessagesSendTextParamsType): Promise<ServiceResultType> {
   const model = getListedConversation(conversationId);
   if (!model) {
@@ -196,6 +198,12 @@ export async function sendText({
     return { ok: false, code: ErrorCode.InvalidArgument };
   }
 
+  // Fork addition: the link preview the client showed (decision F27). Like
+  // Signal's composer, not with attachments.
+  const preview = prepared
+    ? []
+    : await getLinkPreviewsForSend(linkPreviewUrl, body);
+
   let sent: MessageAttributesType | undefined;
   try {
     sent = await model.enqueueMessageForSend(
@@ -204,6 +212,7 @@ export async function sendText({
         ...(bodyRanges.length > 0 ? { bodyRanges } : {}),
         attachments: prepared?.attachments ?? [],
         quote: quoted ? await makeQuote(quoted) : undefined,
+        ...(preview.length > 0 ? { preview } : {}),
       },
       {
         // The user may have a draft in Signal; leave it alone.

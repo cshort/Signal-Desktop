@@ -17,6 +17,7 @@ import {
   messagesEditParamsSchema,
   messagesForwardParamsSchema,
   messagesSendStickerParamsSchema,
+  linkPreviewsFetchParamsSchema,
   messagesSendTextParamsSchema,
   negotiateVersion,
   MAX_FORMATTING_RANGES,
@@ -363,6 +364,31 @@ describe('externalClient/protocol', () => {
       assert.isFalse(ok({ action: 'mute', durationMs: 5 }));
       assert.isFalse(ok({ action: 'leaveGroup' }));
       assert.isFalse(ok({ action: 'disappearingMessages', seconds: -1 }));
+    });
+
+    it('takes text for a link preview and a preview url on send', () => {
+      assert.isTrue(
+        accepts(linkPreviewsFetchParamsSchema, {
+          text: 'see https://example.com',
+          exclude: ['https://other.example'],
+        })
+      );
+      assert.isFalse(
+        accepts(linkPreviewsFetchParamsSchema, { text: 'x', url: 'y' })
+      );
+      assert.isFalse(
+        accepts(linkPreviewsFetchParamsSchema, {
+          text: 'x',
+          exclude: ['x'.repeat(3000)],
+        })
+      );
+      assert.isTrue(
+        accepts(messagesSendTextParamsSchema, {
+          conversationId,
+          body: 'see https://example.com',
+          linkPreviewUrl: 'https://example.com',
+        })
+      );
     });
 
     it('takes a sticker by pack and id', () => {

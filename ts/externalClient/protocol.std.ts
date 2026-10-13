@@ -168,6 +168,7 @@ export const Method = {
   GroupsCreate: 'groups.create',
   GroupsUpdate: 'groups.update',
   MessagesLocateQuote: 'messages.locateQuote',
+  LinkPreviewsFetch: 'linkPreviews.fetch',
 } as const;
 export type MethodType = (typeof Method)[keyof typeof Method];
 
@@ -214,6 +215,8 @@ export const SERVICE_METHOD_CAPABILITIES = {
   [Method.GroupsCreate]: Capability.ConversationsCreate,
   [Method.GroupsUpdate]: Capability.GroupsManage,
   [Method.MessagesLocateQuote]: Capability.MessagesRead,
+  // Part of writing a message, as in Signal's composer.
+  [Method.LinkPreviewsFetch]: Capability.MessagesSend,
 } as const satisfies Partial<Record<MethodType, CapabilityType>>;
 export type ServiceMethodType = keyof typeof SERVICE_METHOD_CAPABILITIES;
 
@@ -472,6 +475,7 @@ export type EventsResultType = Readonly<{
 
 // Signal's own composer limit (shouldShowInvalidMessageToast).
 const MAX_SEND_BODY_LENGTH = 64 * 1024;
+export const MAX_LINK_PREVIEW_URL_LENGTH = 2048;
 // As many as Signal's composer takes.
 export const MAX_SEND_ATTACHMENTS = 32;
 
@@ -524,6 +528,10 @@ export const messagesSendTextParamsSchema = z
     // Reply to this message (it must be in the same conversation), quoting
     // it as Signal's own reply does.
     quoteMessageId: messageIdSchema.optional(),
+    // Fork addition: attach the link preview linkPreviews.fetch showed for
+    // this link, as Signal's composer does. Ignored when the link is no
+    // longer in the body or previews are off.
+    linkPreviewUrl: z.string().max(MAX_LINK_PREVIEW_URL_LENGTH).optional(),
     // Fork addition: finished uploads (attachments.uploadBegin) to send as
     // the message's attachments; the body is then their caption and may be
     // empty.
@@ -540,6 +548,41 @@ export const messagesSendTextParamsSchema = z
 export type MessagesSendTextParamsType = z.infer<
   typeof messagesSendTextParamsSchema
 >;
+
+// Fork addition: the link preview Signal's composer would show for this
+// text (its first link that may be previewed, skipping `exclude`), fetched
+// by Signal itself. Null when there is none, or link previews are off in
+// Signal's settings. Send it with messages.sendText `linkPreviewUrl`.
+export const linkPreviewsFetchParamsSchema = z
+  .object({
+    text: z.string().max(MAX_SEND_BODY_LENGTH),
+    exclude: z
+      .array(z.string().max(MAX_LINK_PREVIEW_URL_LENGTH))
+      .max(20)
+      .optional(),
+  })
+  .strict();
+export type LinkPreviewsFetchParamsType = z.infer<
+  typeof linkPreviewsFetchParamsSchema
+>;
+export type ComposerLinkPreviewDTO = Readonly<{
+  url: string;
+  title: string | null;
+  description: string | null;
+  domain: string | null;
+  // Milliseconds since the epoch, when the page states one.
+  date: number | null;
+  // A small rendering of the preview image.
+  image: Readonly<{
+    contentType: 'image/webp' | 'image/png';
+    width: number;
+    height: number;
+    data: string;
+  }> | null;
+}>;
+export type LinkPreviewsFetchResultType = Readonly<{
+  preview: ComposerLinkPreviewDTO | null;
+}>;
 
 export type MessagesSendTextResultType = Readonly<{
   // The new message; it also arrives as `message.added`.
@@ -1429,6 +1472,7 @@ export const SERVICE_PARAM_SCHEMAS = {
   [Method.GroupsCreate]: groupsCreateParamsSchema,
   [Method.GroupsUpdate]: groupsUpdateParamsSchema,
   [Method.MessagesLocateQuote]: messagesLocateQuoteParamsSchema,
+  [Method.LinkPreviewsFetch]: linkPreviewsFetchParamsSchema,
 } as const satisfies Record<ServiceMethodType, z.ZodType>;
 
 export type ConversationsListParamsType = z.infer<

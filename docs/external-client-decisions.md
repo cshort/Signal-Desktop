@@ -773,3 +773,19 @@ WHY: On a new install the helper asked at once, and Signal's dialog
 covered the link QR code, so nobody could link (found by the Backchannel
 repo's build check, 2026-10-13). Linking first is also the sensible order:
 decide whether to trust an app once Signal is yours.
+
+## F27. Fork only: sending link previews
+
+DECISION: `linkPreviews.fetch {text, exclude?}` (under `messages.send`, as
+part of writing a message) finds the first link Signal's composer would
+preview and has Signal fetch it with the composer's own code
+(`getPreview`, now exported from services/LinkPreview), honoring the link
+previews setting. It returns the title, description, domain and a small
+rendering of the image. Signal keeps the full result for ten minutes, and
+`messages.sendText {linkPreviewUrl}` attaches it exactly as the composer's
+getLinkPreviewForSend would: not when previews are off, the link is gone
+from the body, or the message has attachments. The page shows the card
+above the message box with an × that skips that link.
+
+WHY: Mike noticed links went out bare (2026-10-13 13:11 PT). In Signal the
+sender attaches the preview; recipients never build one.

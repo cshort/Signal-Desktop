@@ -752,6 +752,7 @@ export function createWebServer({
         mentions,
         formatting,
         privateReplyFrom,
+        linkPreviewUrl,
       } = await readJson(req);
       const result = await bridge.call('messages.sendText', {
         conversationId,
@@ -760,6 +761,7 @@ export function createWebServer({
         ...(mentions?.length ? { mentions } : {}),
         ...(formatting?.length ? { formatting } : {}),
         ...(attachmentUploadIds?.length ? { attachmentUploadIds } : {}),
+        ...(typeof linkPreviewUrl === 'string' ? { linkPreviewUrl } : {}),
       });
       // "Reply privately": remember the link for the page (decision F23).
       if (
@@ -776,6 +778,20 @@ export function createWebServer({
         });
       }
       sendJson(res, 200, result);
+      return;
+    }
+    if (req.method === 'POST' && route === 'api/linkPreview') {
+      const { text, exclude } = await readJson(req);
+      sendJson(
+        res,
+        200,
+        await bridge.call('linkPreviews.fetch', {
+          text,
+          ...(Array.isArray(exclude) && exclude.length > 0
+            ? { exclude: exclude.slice(0, 20) }
+            : {}),
+        })
+      );
       return;
     }
     if (req.method === 'GET' && route === 'api/privateReplies') {

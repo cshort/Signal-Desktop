@@ -524,6 +524,41 @@ describe('backchannel helper', () => {
     assert.deepEqual(call.params, { messageId: 'm1', preview: 0 });
   });
 
+  it('asks Signal for link previews and sends the one shown', async () => {
+    bridge.linkPreviews.set('https://example.com/a', {
+      title: 'Example',
+      description: null,
+      domain: 'example.com',
+      date: null,
+      image: null,
+    });
+    const res = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/linkPreview`,
+      headers: json,
+      body: { text: 'see https://example.com/a', exclude: [] },
+    });
+    assert.equal(res.status, 200);
+    assert.equal(JSON.parse(res.text).preview.title, 'Example');
+    const fetchCall = bridge.calls.findLast(
+      c => c.method === 'linkPreviews.fetch'
+    );
+    assert.deepEqual(fetchCall.params, { text: 'see https://example.com/a' });
+
+    await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/send`,
+      headers: json,
+      body: {
+        conversationId: bridge.conversations[0].id,
+        body: 'see https://example.com/a',
+        linkPreviewUrl: 'https://example.com/a',
+      },
+    });
+    const send = bridge.calls.findLast(c => c.method === 'messages.sendText');
+    assert.equal(send.params.linkPreviewUrl, 'https://example.com/a');
+  });
+
   it("asks for a quote's thumbnail by the replying message", async () => {
     const thumb = await http(port, {
       path: `/${helper.token}/api/thumbnail?messageId=m1&quote=1&width=160`,

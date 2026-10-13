@@ -71,7 +71,7 @@ Last reviewed: 2026-10-13, against the Signal release in fork main.
 | Attach files, paste and drop images             | done      | F4                   |
 | Forward to any number of chats                  | different | F4: no limit of five |
 | Stickers                                        | done      | F10                  |
-| Send link previews                              | missing   |                      |
+| Send link previews                              | done      | F27                  |
 | Record voice notes                              | done      | F19                  |
 | Send contact cards                              | missing   |                      |
 | GIF search                                      | missing   |                      |
