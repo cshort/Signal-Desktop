@@ -66,8 +66,18 @@ jobs:
           check running docker inspect -f '{{.State.Status}}' smoke || fail=1
           check socket docker exec smoke sh -c \
             'ls /data/.config/Signal/external-client/' || fail=1
-          check link-qr docker exec smoke bash -c \
-            'import -window root /tmp/s.png && zbarimg -q --raw /tmp/s.png | cut -c1-12' || fail=1
+          # screen.sh qr fails when no QR code decodes; Signal can take a
+          # while to show it.
+          qr=fail
+          for i in $(seq 36); do
+            if docker exec smoke screen.sh qr > /dev/null 2> qr.err; then
+              qr=ok; echo "::notice title=link-qr::QR code after $((i * 5)) s more"; break
+            fi
+            sleep 5
+          done
+          if [ "$qr" != ok ]; then
+            echo "::error title=link-qr::$(cat qr.err)"; fail=1
+          fi
           docker logs smoke > smoke.log 2>&1 || true
           grep -E 'FATAL|ERROR|Error' smoke.log | tail -n 20 | while IFS= read -r line; do
             echo "::warning title=smoke log::$line"
