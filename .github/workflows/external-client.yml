@@ -11,7 +11,7 @@ on:
       - 'ts/test-node/externalClient/**'
       - 'ts/test-helpers/externalClientFakeClient.node.ts'
       - 'packages/windows-local-pipe/**'
-      - 'contrib/signal-rambox/**'
+      - 'contrib/backchannel/helper/**'
       - '.github/workflows/external-client.yml'
   workflow_dispatch:
 
@@ -61,6 +61,6 @@ jobs:
         env:
           NODE_ENV: test
 
-      - name: Run signal-rambox tests
-        run: node --test contrib/signal-rambox/test/signal-rambox_test.mjs
+      - name: Run Backchannel helper tests
+        run: node --test contrib/backchannel/helper/test/backchannel_test.mjs
         shell: bash

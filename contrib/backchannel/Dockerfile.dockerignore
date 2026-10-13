@@ -1,0 +1,6 @@
+# Used by BuildKit for contrib/backchannel/Dockerfile only.
+.git
+node_modules
+**/node_modules
+release
+artifacts

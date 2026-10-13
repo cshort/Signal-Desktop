@@ -373,7 +373,7 @@ export class Bridge {
     const hello = await this.call('session.hello', {
       protocol: 'signal-external-client',
       versions: [1],
-      client: { name: 'signal-rambox', version: '1.0.0' },
+      client: { name: 'backchannel', version: '1.0.0' },
       clientNonce: clientNonce.toString('base64url'),
     });
 

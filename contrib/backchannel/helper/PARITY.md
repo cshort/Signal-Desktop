@@ -1,9 +1,9 @@
 # Parity with Signal Desktop
 
-Standing rule (Mike, 2026-10-13): the Rambox page does everything Signal
+Standing rule (Mike, 2026-10-13): the Backchannel page does everything Signal
 Desktop does, and keeps up as Signal adds features. This is the list. Each
 built item has a decision (Fn) in
-[docs/external-client-decisions.md](../../docs/external-client-decisions.md).
+[docs/external-client-decisions.md](../../../docs/external-client-decisions.md).
 
 Status: **done**, **partial**, **missing**, or **different** (on purpose).
 A weekly check compares new Signal releases against this list and adds

@@ -2,12 +2,13 @@
 // Copyright 2026 Mike Simone
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// signal-rambox: shows Signal Desktop inside Rambox (or any app that hosts web
-// pages) through Signal's external-client bridge. No dependencies; Node 20+.
+// Backchannel: shows your Signal chats in a web page (Rambox, Ferdium or any
+// browser) through this fork's external-client bridge in Signal Desktop. Not
+// made or endorsed by Signal Messenger. No dependencies; Node 20+.
 //
-//   node signal-rambox.mjs            start; in a terminal, prints the URL
-//                                     to add to Rambox
-//   node signal-rambox.mjs --url      print the URL and exit
+//   node backchannel.mjs              start; in a terminal, prints the URL
+//                                     to open
+//   node backchannel.mjs --url        print the URL and exit
 //
 // Options:
 //   --user-data <dir>   Signal profile dir (default: the platform default)
@@ -22,7 +23,13 @@
 // The first run asks Signal for approval; answer the dialog in Signal.
 
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,9 +48,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 
 // Signal's fonts (emoji and Inter): a copy next to the helper (the container
 // image has one), else the Signal Desktop checkout this helper lives in.
-const FONT_DIR = [join(HERE, 'fonts'), join(HERE, '..', '..', 'fonts')].find(
-  dir => existsSync(join(dir, 'emoji.woff2'))
-);
+const FONT_DIR = [
+  join(HERE, 'fonts'),
+  join(HERE, '..', '..', '..', 'fonts'),
+].find(dir => existsSync(join(dir, 'emoji.woff2')));
 
 function parseArgs(argv) {
   const out = { port: 47830, bind: '127.0.0.1', origins: [], printUrl: false };
@@ -75,17 +83,26 @@ function parseArgs(argv) {
 }
 
 function defaultConfigDir() {
-  if (process.platform === 'win32') {
-    return join(process.env.APPDATA, 'signal-rambox');
+  const base =
+    process.platform === 'win32'
+      ? process.env.APPDATA
+      : process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
+  const dir = join(base, 'backchannel');
+  // Before the rename to Backchannel the folder was signal-rambox. Moving it
+  // keeps the page address (token) and Signal's approval (key).
+  const old = join(base, 'signal-rambox');
+  if (!existsSync(dir) && existsSync(old)) {
+    try {
+      renameSync(old, dir);
+    } catch {
+      return old;
+    }
   }
-  return join(
-    process.env.XDG_CONFIG_HOME || join(homedir(), '.config'),
-    'signal-rambox'
-  );
+  return dir;
 }
 
 // The token is the only secret in the page URL. It is created once and kept,
-// so the Rambox app does not need to be edited after a restart.
+// so the page address does not change after a restart.
 function loadToken(file) {
   if (existsSync(file)) {
     return readFileSync(file, 'utf8').trim();
@@ -108,7 +125,7 @@ const args = parseArgs(process.argv.slice(2));
 const configDir = args.configDir || defaultConfigDir();
 const token = loadToken(join(configDir, 'token'));
 const origins = allowedOrigins(args.port, args.origins);
-// The address to give Rambox: the --origin name if there is one.
+// The page's address: the --origin name if there is one.
 const url = `${args.origins[0] ?? origins[0]}/${token}/`;
 
 if (args.printUrl) {
@@ -125,7 +142,7 @@ let web;
 const bridge = new Bridge({
   endpoint,
   keyFile: join(configDir, 'key.json'),
-  displayName: 'Rambox (signal-rambox)',
+  displayName: 'Backchannel',
   log,
   onState(state) {
     store.state = state === BridgeState.Ready ? 'loading' : state;
@@ -179,7 +196,7 @@ log(`client key: ${bridge.publicKey}`);
 // The token is a secret, so it never goes to a log: only an interactive
 // terminal sees the full URL. Elsewhere (a container, a service) use --url.
 if (process.stdout.isTTY) {
-  log(`add this URL to Rambox as a custom app: ${url}`);
+  log(`open this URL (or add it to Rambox as a custom app): ${url}`);
 } else {
   log(
     `serving ${args.origins[0] ?? origins[0]}/ (run with --url for the address)`

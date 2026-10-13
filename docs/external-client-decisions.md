@@ -681,3 +681,28 @@ admins (Make or Remove admin, Remove from group), Requests to join
 approve new members, reset) and Permissions, and Leave group.
 
 WHY: Next gap on Mike's standing parity rule (2026-10-13).
+
+## F22. Fork only: the name Backchannel
+
+DECISION: The Docker kit and helper are renamed Backchannel (Mike,
+2026-10-13), since Signal guards its trademark and others will want to run
+this. `contrib/signal-headless` is now `contrib/backchannel` and
+`contrib/signal-rambox` is `contrib/backchannel/helper` (entry point
+`backchannel.mjs`). The image, Compose project and service are
+`backchannel`; the page's title is "Backchannel" with its own icon; the
+helper asks Signal's approval as "Backchannel". The READMEs say it is not
+made or endorsed by Signal Messenger and use "Signal" only to say what it
+works with.
+
+No prebuilt image is published: a prebuilt image would redistribute a
+modified, Signal-branded Signal Desktop. People build it from this
+repository on their own machine.
+
+Existing installs keep working: Compose still reads `SIGNAL_UID`,
+`SIGNAL_DATA` and `RAMBOX_ORIGIN`, and the helper moves its old
+`signal-rambox` config folder to `backchannel` on start, keeping the page
+token and the approved key. Grants are kept per key, so Signal doesn't ask
+again for capabilities it already granted.
+
+WHY: Mike's call on the name, from a short list; publishing the kit for
+others.

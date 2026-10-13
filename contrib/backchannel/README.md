@@ -1,0 +1,133 @@
+# Backchannel
+
+Your Signal chats in a browser tab (Rambox, Ferdium, or any browser),
+served from a container on your own server. The container runs Signal
+Desktop built from this fork on a virtual display, linked to your phone as
+one more device, plus the [Backchannel helper](helper) that serves the chat
+page. Everything works as in Signal Desktop: messages you send reach your
+other devices, read state syncs both ways, and mute and archive settings
+come across. What the page does compared to Signal Desktop:
+[helper/PARITY.md](helper/PARITY.md).
+
+Backchannel is not made, endorsed or supported by Signal Messenger.
+"Signal" is their trademark and is used here only to say what this works
+with. No prebuilt image is published: you build it from this repository,
+which builds Signal Desktop from source on your machine. It needs nothing
+else from you (no signal-cli or REST API).
+
+## Quick start
+
+You need Docker with Compose, several GB of free disk for the build, and
+your phone with Signal on it.
+
+1. Get the code and make a data folder:
+
+   ```sh
+   git clone https://github.com/mikesimone/Signal-Desktop.git
+   cd Signal-Desktop/contrib/backchannel
+   sudo mkdir -p /var/lib/backchannel
+   sudo chown 1000:1000 /var/lib/backchannel
+   ```
+
+2. Create `.env` next to `compose.yml`:
+
+   ```sh
+   BACKCHANNEL_UID=1000
+   BACKCHANNEL_DATA=/var/lib/backchannel
+   # Once it's behind your reverse proxy:
+   # BACKCHANNEL_ORIGIN=https://chat.example.net
+   ```
+
+   The data folder holds your Signal profile and keys; keep it private
+   and back it up.
+
+3. Build and start it: `docker compose up -d --build`. The first build
+   takes a while (about 20 minutes on a small server).
+
+4. Link it to your phone. `docker compose exec backchannel screen.sh qr`
+   prints the link QR code as text in your terminal. In Signal on your
+   phone go to Settings > Linked devices > Link new device and scan it.
+   Signal Desktop then asks for a device name: see the screen with
+   `screen.sh shot` (it saves `screen.png` in the data folder), and answer
+   with `screen.sh type 'My server'` and `screen.sh key Return`, or use
+   `screen.sh vnc` for a live view (below).
+
+5. Approve the helper. Signal shows a dialog asking to allow "Backchannel";
+   allow it the same way (`screen.sh shot`, then `screen.sh click X Y`).
+
+6. Open the page. `docker compose exec backchannel screen.sh url` prints
+   its address, with a secret token in it. Anyone with that address can
+   read and send your messages, so treat it like a password.
+
+### Reaching the page
+
+The container publishes the page (8083) and VNC (5901) on the host's
+127.0.0.1 only. To use it from other machines, put a reverse proxy with
+HTTPS in front of 8083 and set `BACKCHANNEL_ORIGIN` to its address. Let
+the proxy pass large uploads, or photos over its default limit fail with
+HTTP 413: in nginx, `client_max_body_size 100m;` in that server block. For
+VNC from another machine: `ssh -L 5901:127.0.0.1:5901 yourserver`, then a
+VNC viewer on `localhost:5901` after `screen.sh vnc`.
+
+In Rambox: **Add app > Add Custom App**, paste the address, and turn on
+notifications and "Display in tab" for the unread badge.
+
+## Pieces
+
+- `Dockerfile`: builds Signal Desktop from this repository
+  (`build:release --linux dir`) and a slim runtime image with Xvfb. Signal
+  runs with `--password-store=basic` because there is no desktop keyring,
+  and with `--no-sandbox` because Chromium's sandbox can't create its
+  namespaces under Docker's default seccomp profile. The container, its
+  loopback-only ports and the token page are the boundary instead.
+- `patches/0001-enable-bridge-from-env.patch`: lets
+  `SIGNAL_ENABLE_EXTERNAL_CLIENTS=1` turn the bridge on in a packaged build.
+- `entrypoint.sh`: starts Xvfb, Signal and the helper (on the Node copied
+  from the build stage).
+- `screen.sh`: screenshots, clicks and VNC for the one-time setup.
+- `compose.yml`: the service, its ports on 127.0.0.1 only, and the data
+  folder.
+- `helper/`: the Backchannel helper and chat page. It also runs on its own
+  next to Signal Desktop (this fork's build) on a PC: see its README.
+
+### Upgrading from signal-headless
+
+Before the rename this folder was `contrib/signal-headless`, with the helper
+in `contrib/signal-rambox`. To move an existing install without relinking:
+
+1. In the old folder: `docker compose down`.
+2. `git pull`, then move your `.env` to `contrib/backchannel/` (the old
+   names `SIGNAL_UID`, `SIGNAL_DATA` and `RAMBOX_ORIGIN` still work).
+3. In `contrib/backchannel`: `docker compose up -d --build`.
+
+The helper moves its `signal-rambox` folder in the data folder to
+`backchannel` on first start, so the page address and Signal's approval
+stay the same. Don't run the old and new containers at once: they would
+share one Signal profile.
+
+## Keeping it current
+
+Signal Desktop builds stop working about 90 days after they are built, and
+the servers eventually refuse old versions. Rebase this fork onto each
+Signal release, run the "Backchannel image" workflow, then on the host
+`git pull && docker compose up -d --build`. The profile lives in the data
+folder, so rebuilding keeps the link and the approval.
+
+## Hourly upstream sync (optional)
+
+`sync/` merges new Signal Desktop commits into your fork every hour and
+redeploys, using one unattended [Claude Code](https://claude.com/claude-code)
+run (`claude -p` with a narrow tool allowlist) to resolve the merge, adapt
+this folder, rebuild, check health and push. It rolls back to the previous
+image if the new one doesn't come up, and never prints the page's token.
+
+1. `sudo install -m 755 sync/sigdesktop-sync.sh /usr/local/bin/sigdesktop-sync`
+2. Copy `sync/sigdesktop-sync.env.example` to `/etc/sigdesktop-sync.env`
+   and fill it in. `SYNC_NOTIFY` can name any command that takes the report
+   as its one argument.
+3. Edit the user and paths in `sync/sigdesktop-sync.service`, copy it and
+   `sync/sigdesktop-sync.timer` to `/etc/systemd/system/`, then
+   `sudo systemctl enable --now sigdesktop-sync.timer`.
+
+The first run only records where upstream is. The sync user needs `git`
+push access to your fork, `gh` signed in, Docker, and Claude Code signed in.

@@ -1,8 +1,8 @@
 // Copyright 2026 Mike Simone
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// The local web side of signal-rambox: a small HTTP server on 127.0.0.1 that
-// serves the chat page Rambox loads, a JSON API over the bridge, and a
+// The local web side of Backchannel: a small HTTP server on 127.0.0.1 that
+// serves the chat page (in Rambox or any browser), a JSON API over the bridge, and a
 // Server-Sent Events stream of live updates.
 //
 // Anything on this computer can open a loopback port, including web pages in
@@ -84,7 +84,7 @@ const STATIC_FILES = {
   // Signal's notification sound.
   'sounds/notification.ogg': ['sounds/notification.ogg', 'audio/ogg'],
   // Signal's voice note encoder (bundles/workers/mp3Encoder.js), copied in
-  // by the signal-headless image; without it the page can't record.
+  // by the Backchannel image; without it the page can't record.
   'mp3Encoder.js': ['mp3Encoder.js', 'text/javascript; charset=utf-8'],
 };
 

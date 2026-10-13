@@ -1,7 +1,7 @@
 // Copyright 2026 Mike Simone
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// A stand-in for Signal's bridge, enough for signal-rambox's tests: real
+// A stand-in for Signal's bridge, enough for Backchannel's helper tests: real
 // framing and signatures, canned conversations and messages.
 
 import {

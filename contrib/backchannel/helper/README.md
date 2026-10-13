@@ -1,9 +1,14 @@
-# signal-rambox
+# Backchannel helper
 
-Use Signal inside [Rambox](https://rambox.app) (or any app that hosts web
-pages) through Signal Desktop's local API for companion apps (the external
-client bridge, proposed upstream as signalapp/Signal-Desktop#8054 and
-declined there, so it lives in this fork).
+Use your Signal chats inside [Rambox](https://rambox.app), Ferdium or any
+browser, through the local API for companion apps that this fork adds to
+Signal Desktop (the external client bridge, proposed upstream as
+signalapp/Signal-Desktop#8054 and declined there, so it lives in this
+fork). It works with this fork's Signal Desktop only.
+
+Backchannel is not made, endorsed or supported by Signal Messenger.
+"Signal" is their trademark and is used here only to say what this works
+with.
 
 Signal Desktop keeps running, minimized to the tray, and stays the real
 client: it holds the keys, sends and receives. This helper is an approved
@@ -70,7 +75,7 @@ What the page does and what it doesn't do yet, compared to Signal Desktop: [PARI
 ## How it works
 
 ```
-Rambox  ──http://127.0.0.1:47830/<token>/──▶  signal-rambox  ──pipe──▶  Signal Desktop
+Rambox  ──http://127.0.0.1:47830/<token>/──▶  backchannel  ──pipe──▶  Signal Desktop
 (web page)                                    (this helper)          (bridge)
 ```
 
@@ -84,7 +89,7 @@ pipe or Unix socket, so this helper sits in between:
   approval once more.
 - It serves a chat page on **127.0.0.1 only**. Everything it serves lives
   under a random secret token, so the URL you give Rambox is the only way in.
-- Rambox shows the unread badge from the page title (`(3) Signal`), and turns
+- Rambox shows the unread badge from the page title (`(3) Backchannel`), and turns
   the page's notifications into its own. Muted and archived chats don't
   count.
 
@@ -120,34 +125,35 @@ it; on a computer shared with untrusted users, don't run this.
 
 ## Setup (Windows)
 
-1. Install [Node.js](https://nodejs.org) 20 or newer.
+1. Install [Node.js](https://nodejs.org) 20 or newer, and run Signal
+   Desktop built from this fork.
 2. In Signal Desktop: Settings > Privacy > **Apps on this computer** > on.
 3. Start the helper:
 
    ```powershell
-   node C:\path\to\signal-rambox\signal-rambox.mjs
+   node C:\path\to\backchannel\helper\backchannel.mjs
    ```
 
-   Signal shows an approval dialog for "Rambox (signal-rambox)". Allow it.
+   Signal shows an approval dialog for "Backchannel". Allow it.
    In a terminal the helper prints the URL to use; get it any time with
    `--url`. It never writes the token to a log (a container or service log
    shows only the address without it).
 
-4. In Rambox: **Add app > Add Custom App**, name it Signal, paste the URL,
+4. In Rambox: **Add app > Add Custom App**, name it Backchannel, paste the URL,
    and turn on notifications and "Display in tab" for the unread badge.
 
 ### Start it at logon (Windows)
 
 ```powershell
 $node = (Get-Command node).Source
-$script = 'C:\path\to\signal-rambox\signal-rambox.mjs'
+$script = 'C:\path\to\backchannel\helper\backchannel.mjs'
 $action = New-ScheduledTaskAction -Execute $node -Argument "`"$script`""
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-Register-ScheduledTask -TaskName 'signal-rambox' -Action $action -Trigger $trigger -Settings $settings
+Register-ScheduledTask -TaskName 'backchannel' -Action $action -Trigger $trigger -Settings $settings
 ```
 
-Remove it with `Unregister-ScheduledTask signal-rambox -Confirm:$false`.
+Remove it with `Unregister-ScheduledTask backchannel -Confirm:$false`.
 
 ## Options
 
@@ -159,17 +165,19 @@ Remove it with `Unregister-ScheduledTask signal-rambox -Confirm:$false`.
 --origin <url>      also accept this origin, e.g. an HTTPS name on a reverse
                     proxy in front of the helper (repeatable); --url prints it
 --config <dir>      where key.json and token live
-                    (default %APPDATA%\signal-rambox, or ~/.config/signal-rambox)
---url               print the Rambox URL and exit
+                    (default %APPDATA%\backchannel, or ~/.config/backchannel;
+                    an older signal-rambox folder is moved there)
+--url               print the page URL and exit
 ```
 
 For a development build of Signal with its own profile, pass that profile with
 `--user-data`. To run Signal and the helper together in Docker on a server,
-see [signal-headless](../signal-headless).
+see [Backchannel](../README.md).
 
 ## Starting over
 
-- New URL: delete `token` in the config folder and restart; update Rambox.
+- New URL: delete `token` in the config folder and restart; update Rambox
+  or your bookmark.
 - Pair again: remove the app in Signal (Settings > Privacy > Apps on this
   computer), delete `key.json`, restart the helper, approve again.
 - "Signal's identity key changed": Signal's bridge key is not the one this
@@ -179,7 +187,7 @@ see [signal-headless](../signal-headless).
 ## Tests
 
 ```
-node --test contrib/signal-rambox/test/signal-rambox_test.mjs
+node --test contrib/backchannel/helper/test/backchannel_test.mjs
 ```
 
 They run the real helper against a fake Signal bridge (real framing and

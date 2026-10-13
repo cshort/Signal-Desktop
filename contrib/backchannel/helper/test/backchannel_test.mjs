@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // End-to-end tests: the real helper process against FakeBridge.
-//   node --test contrib/signal-rambox/test/
+//   node --test contrib/backchannel/helper/test/
 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -18,7 +18,7 @@ import { FakeBridge, makeConversation, makeMessage } from './fake-bridge.mjs';
 const HELPER = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
-  'signal-rambox.mjs'
+  'backchannel.mjs'
 );
 
 function waitFor(check, timeoutMs = 10_000) {
@@ -81,7 +81,7 @@ const json = { 'content-type': 'application/json' };
 // A Unix socket on macOS and Linux, a named pipe on Windows.
 function bridgePath(dir) {
   return process.platform === 'win32'
-    ? `\\\\.\\pipe\\signal-rambox-test-${process.pid}-${Math.random()}`
+    ? `\\\\.\\pipe\\backchannel-test-${process.pid}-${Math.random()}`
     : join(dir, 'bridge.sock');
 }
 
@@ -159,7 +159,7 @@ function openEvents(port, token) {
   return { events, opened, close: () => req.destroy() };
 }
 
-describe('signal-rambox', () => {
+describe('backchannel helper', () => {
   const dir = mkdtempSync(join(tmpdir(), 'srb-sock-'));
   const socketPath = bridgePath(dir);
   const port = 47_900 + Math.floor(Math.random() * 500);
@@ -218,7 +218,7 @@ describe('signal-rambox', () => {
       'typing.read',
       'typing.send',
     ]);
-    assert.equal(req.params.displayName, 'Rambox (signal-rambox)');
+    assert.equal(req.params.displayName, 'Backchannel');
   });
 
   it('serves the conversation snapshot', async () => {
@@ -235,7 +235,7 @@ describe('signal-rambox', () => {
   it('serves the page with a strict content security policy', async () => {
     const res = await http(port, { path: `/${helper.token}/` });
     assert.equal(res.status, 200);
-    assert.match(res.text, /<title>Signal<\/title>/);
+    assert.match(res.text, /<title>Backchannel<\/title>/);
     assert.match(res.headers['content-security-policy'], /default-src 'none'/);
     assert.match(
       res.headers['content-security-policy'],
@@ -1060,7 +1060,7 @@ describe('signal-rambox', () => {
   });
 });
 
-describe('signal-rambox when the user says no', () => {
+describe('backchannel helper when the user says no', () => {
   const dir = mkdtempSync(join(tmpdir(), 'srb-sock-'));
   const socketPath = bridgePath(dir);
   const port = 48_500 + Math.floor(Math.random() * 500);
@@ -1099,7 +1099,7 @@ describe('signal-rambox when the user says no', () => {
   });
 });
 
-describe('signal-rambox behind a reverse proxy', () => {
+describe('backchannel helper behind a reverse proxy', () => {
   const dir = mkdtempSync(join(tmpdir(), 'srb-sock-'));
   const socketPath = bridgePath(dir);
   const port = 48_500 + Math.floor(Math.random() * 500);

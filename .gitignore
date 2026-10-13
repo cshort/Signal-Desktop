@@ -50,5 +50,5 @@ ts/protobuf/*.d.ts
 *.sublime*
 *.map
 
-# Copied in by contrib/signal-headless/Dockerfile (Signal's voice note encoder).
-contrib/signal-rambox/public/mp3Encoder.js
+# Copied in by contrib/backchannel/Dockerfile (Signal's voice note encoder).
+contrib/backchannel/helper/public/mp3Encoder.js

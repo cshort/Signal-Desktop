@@ -3,21 +3,24 @@
 
 # Run from this directory: docker compose up -d --build
 # Settings come from .env next to this file (not in git), e.g.
-#   SIGNAL_UID=994
-#   SIGNAL_DATA=/var/lib/signal-desktop-headless
-#   RAMBOX_ORIGIN=https://sigdesktop.example.net
+#   BACKCHANNEL_UID=1000
+#   BACKCHANNEL_DATA=/var/lib/backchannel
+#   BACKCHANNEL_ORIGIN=https://chat.example.net
+# (The older names SIGNAL_UID, SIGNAL_DATA and RAMBOX_ORIGIN still work.)
+
+name: backchannel
 
 services:
-  signal-desktop:
+  backchannel:
     build:
       context: ../..
-      dockerfile: contrib/signal-headless/Dockerfile
+      dockerfile: contrib/backchannel/Dockerfile
       args:
-        SIGNAL_UID: ${SIGNAL_UID:-1000}
-    image: signal-headless:latest
+        SIGNAL_UID: ${BACKCHANNEL_UID:-${SIGNAL_UID:-1000}}
+    image: backchannel:latest
     restart: unless-stopped
     environment:
-      RAMBOX_ORIGIN: ${RAMBOX_ORIGIN:-}
+      BACKCHANNEL_ORIGIN: ${BACKCHANNEL_ORIGIN:-${RAMBOX_ORIGIN:-}}
       SIGNAL_EXTRA_ARGS: ${SIGNAL_EXTRA_ARGS:-}
     ports:
       # Host loopback only: a reverse proxy (or ssh -L) puts the chat page
@@ -25,6 +28,6 @@ services:
       - '127.0.0.1:8083:8083'
       - '127.0.0.1:5901:5900'
     volumes:
-      - ${SIGNAL_DATA:?set SIGNAL_DATA in .env}:/data
+      - ${BACKCHANNEL_DATA:-${SIGNAL_DATA:?set BACKCHANNEL_DATA in .env}}:/data
     # Chromium needs more shared memory than Docker's 64 MB default.
     shm_size: 1gb

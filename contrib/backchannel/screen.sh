@@ -10,7 +10,7 @@
 #   screen.sh type TEXT       type text
 #   screen.sh qr              print the link QR code on screen as text, to
 #                             scan from a phone without a screenshot
-#   screen.sh url             print the address to add to Rambox
+#   screen.sh url             print the chat page's address
 #   screen.sh vnc             serve the screen over VNC on port 5900, which
 #                             compose.yml publishes on the host's 127.0.0.1
 #                             only (ssh -L 5901:127.0.0.1:5901 to reach it)
@@ -30,9 +30,10 @@ case "${1:-}" in
     qrencode -t UTF8 -m 2 "$link"
     ;;
   url)
-    args=(--config /data/signal-rambox --url)
-    [ -n "${RAMBOX_ORIGIN:-}" ] && args+=(--origin "$RAMBOX_ORIGIN")
-    node /opt/signal-rambox/signal-rambox.mjs "${args[@]}"
+    origin="${BACKCHANNEL_ORIGIN:-${RAMBOX_ORIGIN:-}}"
+    args=(--config /data/backchannel --url)
+    [ -n "$origin" ] && args+=(--origin "$origin")
+    node /opt/backchannel/backchannel.mjs "${args[@]}"
     ;;
   vnc) exec x11vnc -nopw -forever -shared -rfbport 5900 ;;
   *) sed -n '5,17p' "$0"; exit 2 ;;

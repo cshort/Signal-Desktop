@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 # Signal Desktop (this fork, with the external client bridge) running
-# headless on a virtual display, plus the signal-rambox helper that serves
+# headless on a virtual display, plus the Backchannel helper that serves
 # its chat page. Build from the repository root:
 #
-#   docker build -f contrib/signal-headless/Dockerfile -t signal-headless .
+#   docker build -f contrib/backchannel/Dockerfile -t backchannel .
 #
-# See contrib/signal-headless/README.md.
+# See contrib/backchannel/README.md.
 
 FROM node:24.21.0-bookworm AS build
 
@@ -21,7 +21,7 @@ COPY . .
 RUN npm install -g "pnpm@$(node -p "require('./package.json').devEngines.packageManager.version")"
 
 # Fork-only changes the upstream PR does not carry.
-RUN for p in contrib/signal-headless/patches/*.patch; do patch -p1 < "$p"; done
+RUN for p in contrib/backchannel/patches/*.patch; do patch -p1 < "$p"; done
 
 RUN pnpm install --frozen-lockfile
 # The build's 90-day expiry counts from SOURCE_DATE_EPOCH, which upstream
@@ -49,17 +49,17 @@ COPY --from=build /src/release/linux-unpacked /opt/Signal
 # crashed with SIGTRAP in the container.
 COPY --from=build /usr/local/bin/node /usr/local/bin/node
 
-COPY contrib/signal-rambox/bridge.mjs contrib/signal-rambox/server.mjs \
-  contrib/signal-rambox/store.mjs contrib/signal-rambox/signal-rambox.mjs \
-  contrib/signal-rambox/fonts.mjs \
-  /opt/signal-rambox/
-COPY contrib/signal-rambox/public /opt/signal-rambox/public
+COPY contrib/backchannel/helper/bridge.mjs contrib/backchannel/helper/server.mjs \
+  contrib/backchannel/helper/store.mjs contrib/backchannel/helper/backchannel.mjs \
+  contrib/backchannel/helper/fonts.mjs \
+  /opt/backchannel/
+COPY contrib/backchannel/helper/public /opt/backchannel/public
 # Signal's voice note encoder, for recording voice notes on the page.
-COPY --from=build /src/bundles/workers/mp3Encoder.js /opt/signal-rambox/public/mp3Encoder.js
+COPY --from=build /src/bundles/workers/mp3Encoder.js /opt/backchannel/public/mp3Encoder.js
 # Signal's own emoji and Inter fonts for the page.
-COPY fonts/emoji.woff2 /opt/signal-rambox/fonts/emoji.woff2
-COPY fonts/inter-v3.19 /opt/signal-rambox/fonts/inter-v3.19
-COPY contrib/signal-headless/entrypoint.sh contrib/signal-headless/screen.sh \
+COPY fonts/emoji.woff2 /opt/backchannel/fonts/emoji.woff2
+COPY fonts/inter-v3.19 /opt/backchannel/fonts/inter-v3.19
+COPY contrib/backchannel/entrypoint.sh contrib/backchannel/screen.sh \
   /usr/local/bin/
 
 USER signal

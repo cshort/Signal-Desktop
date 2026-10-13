@@ -3,7 +3,8 @@
 
 # Signal Desktop
 
-> **This fork: Signal in a browser tab (Rambox, Ferdium, any web view).**
+> **This fork powers Backchannel: your Signal chats in a browser tab (Rambox,
+> Ferdium, any web view).**
 > It adds a local API to Signal Desktop that only apps you approve inside
 > Signal can use, plus a web chat page that does what Signal Desktop does:
 > photos, files, paste-to-send, reactions (with who reacted), replies,
@@ -11,8 +12,8 @@
 > sending polls to any number of chats. Signal keeps every key; the page
 > never sees one.
 >
-> - Run it on a server in Docker: [contrib/signal-headless](contrib/signal-headless)
-> - Run it next to Signal on your own PC: [contrib/signal-rambox](contrib/signal-rambox)
+> - Run it on a server in Docker: [contrib/backchannel](contrib/backchannel)
+> - Run it next to Signal on your own PC: [contrib/backchannel/helper](contrib/backchannel/helper)
 > - Security design: [docs/external-client-threat-model.md](docs/external-client-threat-model.md)
 >
 > Signal declined to add the API upstream
@@ -20,7 +21,8 @@
 > closed October 2026), so this stays a maintained fork that merges every
 > Signal release.
 >
-> Not affiliated with Signal. Everything below is Signal's own README.
+> Backchannel is not made, endorsed or supported by Signal Messenger;
+> "Signal" is their trademark. Everything below is Signal's own README.
 
 Signal Desktop links with Signal on [Android](https://github.com/signalapp/Signal-Android) or [iOS](https://github.com/signalapp/Signal-iOS) and lets you message from your Windows, macOS, and Linux computers.
 

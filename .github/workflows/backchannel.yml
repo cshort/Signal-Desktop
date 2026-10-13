@@ -3,14 +3,14 @@
 
 # Fork-only: checks that the headless Signal image still builds. Run it by
 # hand after rebasing onto a new Signal release.
-name: Signal headless image
+name: Backchannel image
 on:
   push:
     branches:
       - main
     paths:
-      - 'contrib/signal-headless/**'
-      - '.github/workflows/signal-headless.yml'
+      - 'contrib/backchannel/**'
+      - '.github/workflows/backchannel.yml'
   workflow_dispatch:
 
 permissions:
@@ -28,8 +28,8 @@ jobs:
       - name: Build
         run: |
           rc=0
-          docker build --progress=plain -f contrib/signal-headless/Dockerfile \
-            -t signal-headless . > build.log 2>&1 || rc=$?
+          docker build --progress=plain -f contrib/backchannel/Dockerfile \
+            -t backchannel . > build.log 2>&1 || rc=$?
           if [ "$rc" != 0 ]; then
             # Annotations can be read without downloading the full log.
             grep -E 'ERROR|ERR!|[Ee]rror|Trace|signal [0-9]|core dumped' build.log |
@@ -58,10 +58,10 @@ jobs:
               return $rc
             fi
           }
-          check helper docker run --rm --entrypoint node signal-headless \
-            /opt/signal-rambox/signal-rambox.mjs --config /tmp/c --url || fail=1
+          check helper docker run --rm --entrypoint node backchannel \
+            /opt/backchannel/backchannel.mjs --config /tmp/c --url || fail=1
           docker run -d --name smoke --shm-size 1g \
-            --tmpfs /data:uid=1000,gid=1000 signal-headless
+            --tmpfs /data:uid=1000,gid=1000 backchannel
           sleep 60
           check running docker inspect -f '{{.State.Status}}' smoke || fail=1
           check socket docker exec smoke sh -c \

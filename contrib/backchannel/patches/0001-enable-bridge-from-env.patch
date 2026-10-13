@@ -8,7 +8,7 @@ index a33a789..b1243a4 100644
    async #isEnabled(): Promise<boolean> {
 -    // Unpackaged development builds can opt in without touching the database.
 -    if (!app.isPackaged && process.env.SIGNAL_ENABLE_EXTERNAL_CLIENTS === '1') {
-+    // Headless image (contrib/signal-headless): the container opts in with
++    // Headless image (contrib/backchannel): the container opts in with
 +    // an environment variable, packaged or not, since nobody can click the
 +    // setting and Signal's remote config has not enabled the feature.
 +    if (process.env.SIGNAL_ENABLE_EXTERNAL_CLIENTS === '1') {

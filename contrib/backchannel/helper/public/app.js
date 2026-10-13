@@ -1,7 +1,7 @@
 // Copyright 2026 Mike Simone
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// The chat page Rambox shows. Talks only to the signal-rambox helper that
+// The Backchannel chat page. Talks only to the Backchannel helper that
 // served it (same origin; the token is part of the page's own path).
 // All text from Signal goes into the page through textContent, never HTML.
 
@@ -61,11 +61,11 @@ const BANNERS = {
   offline:
     "Can't reach Signal. Make sure Signal is running and Settings > " +
     'Privacy > Apps on this computer is on. Retrying…',
-  awaitingApproval: 'Approve "Rambox (signal-rambox)" in the Signal window.',
+  awaitingApproval: 'Approve "Backchannel" in the Signal window.',
   denied: 'Signal did not allow this app.',
   keyMismatch:
     "Signal's identity key changed since this app was approved. Delete " +
-    'key.json in the signal-rambox config folder and restart it to pair again.',
+    'key.json in the Backchannel config folder and restart it to pair again.',
   loading: 'Loading chats…',
 };
 
@@ -288,7 +288,7 @@ function renderBanner() {
       disconnectedSince !== null &&
       Date.now() - disconnectedSince > HELPER_DOWN_AFTER_MS;
     text = long
-      ? "The signal-rambox helper isn't running. Retrying…"
+      ? "The Backchannel helper isn't running. Retrying…"
       : 'Connecting…';
   } else if (bridgeState !== 'ready') {
     text = BANNERS[bridgeState] ?? `Signal: ${bridgeState}`;
@@ -313,7 +313,7 @@ function unreadTotal() {
 // Rambox reads the unread badge from "(N)" at the start of the title.
 function renderTitle() {
   const total = unreadTotal();
-  document.title = total > 0 ? `(${total}) Signal` : 'Signal';
+  document.title = total > 0 ? `(${total}) Backchannel` : 'Backchannel';
 }
 
 // --- conversation list -----------------------------------------------------
@@ -4688,7 +4688,7 @@ function notify(m) {
     if (content === 'name') {
       body = 'New message';
     } else if (content === 'count') {
-      title = 'Signal';
+      title = 'Backchannel';
       body = 'New message';
     }
     if (signalSettings?.notificationSound) {

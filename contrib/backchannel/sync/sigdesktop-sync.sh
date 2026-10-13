@@ -20,7 +20,7 @@
 #   - new upstream release tags,
 #   - PRs merged into either repository,
 # and hands that list to one `claude -p` run in the fork clone. Claude does
-# the merge, adapts contrib/signal-headless, rebuilds, verifies, pushes and
+# the merge, adapts contrib/backchannel, rebuilds, verifies, pushes and
 # writes the report handed to SYNC_NOTIFY. Nothing watches this run.
 #
 # State: ~/.local/state/sigdesktop-sync (last upstream SHA, known tags, last
@@ -122,7 +122,7 @@ of $FORK (main), with upstream = $UPSTREAM
 (fetched, push disabled). Nobody is watching: work it through on your own and
 end with the report. The changes since the last run are listed at the end.
 
-Read contrib/signal-headless/README.md and Dockerfile first.
+Read contrib/backchannel/README.md and Dockerfile first.
 
 1. Merge upstream/main into main (git merge, never rebase, never force-push,
    never reset). Keep the fork's external client bridge and everything under
@@ -130,12 +130,12 @@ Read contrib/signal-headless/README.md and Dockerfile first.
    git merge --abort, change nothing else, and report FAILED.
 2. Look at what the merge changed that affects the headless build: the
    Node/pnpm versions in package.json, native dependencies, build scripts,
-   electron-builder config, and the files contrib/signal-headless/patches/
-   apply to. Update contrib/signal-headless (Dockerfile, patches,
+   electron-builder config, and the files contrib/backchannel/patches/
+   apply to. Update contrib/backchannel (Dockerfile, patches,
    entrypoint.sh) to match, and commit with a message saying why.
 3. Keep the running container until the new image is proven:
-   docker tag signal-headless:latest signal-headless:previous
-   then, in contrib/signal-headless, docker compose build (it can take up to
+   docker tag backchannel:latest backchannel:previous
+   then, in contrib/backchannel, docker compose build (it can take up to
    an hour; run it in the foreground with a long timeout). If the build
    fails, fix it if the cause is clear and retry; otherwise leave the old
    container running, do not push, and report FAILED with the last error
@@ -143,11 +143,11 @@ Read contrib/signal-headless/README.md and Dockerfile first.
 4. docker compose up -d, then check, within about 10 minutes:
    - docker compose logs shows "loaded N conversations" and "bridge: ready"
      after the restart;
-   - with the token from \`docker compose exec signal-desktop screen.sh url\`,
+   - with the token from \`docker compose exec backchannel screen.sh url\`,
      curl $SYNC_SITE/<token>/api/state returns 200,
      and $SYNC_SITE/api/state returns 404.
    If Signal or the bridge doesn't come up, roll back:
-   docker tag signal-headless:previous signal-headless:latest &&
+   docker tag backchannel:previous backchannel:latest &&
    docker compose up -d --no-build, confirm the old one is healthy again,
    do not push, and report FAILED.
    If the bridge reports keyMismatch or awaitingApproval, don't delete or
@@ -162,7 +162,7 @@ print the access token or the full chat URL anywhere, including the report.
 
 Your final message is the report sent to the owner. Start it with
 "OK:", "FAILED:" or "NEEDS MIKE:", then at most 8 short lines: the upstream
-range and version merged, what you changed in contrib/signal-headless and
+range and version merged, what you changed in contrib/backchannel and
 why, build and health results, and the pushed commit.
 EOF
 )
@@ -177,7 +177,7 @@ BASH_DEFAULT_TIMEOUT_MS=600000 BASH_MAX_TIMEOUT_MS=3600000 \
 $changes" \
   --permission-mode default \
   --allowedTools Read Edit Write Glob Grep \
-    'Bash(git:*)' 'Bash(docker compose:*)' 'Bash(docker tag signal-headless:*)' \
+    'Bash(git:*)' 'Bash(docker compose:*)' 'Bash(docker tag backchannel:*)' \
     'Bash(docker image prune:*)' 'Bash(docker images:*)' 'Bash(curl:*)' \
     'Bash(tail:*)' 'Bash(head:*)' 'Bash(grep:*)' 'Bash(cat:*)' 'Bash(ls:*)' \
     'Bash(df:*)' 'Bash(sleep:*)' 'Bash(diff:*)' 'Bash(jq:*)' \
