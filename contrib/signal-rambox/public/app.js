@@ -2459,9 +2459,13 @@ function toast(text) {
   box.textContent = text;
   box.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    box.hidden = true;
-  }, 2000);
+  // Long enough to read.
+  toastTimer = setTimeout(
+    () => {
+      box.hidden = true;
+    },
+    Math.max(2000, text.length * 60)
+  );
 }
 
 // --- message actions ---------------------------------------------------------
@@ -4624,8 +4628,17 @@ async function startRecording() {
     stream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: { ideal: 1 } },
     });
-  } catch {
-    toast('Allow the microphone for this page to record voice messages.');
+  } catch (error) {
+    // Rambox shows no permission prompt, so say what refused it.
+    toast(
+      error?.name === 'NotFoundError'
+        ? 'No microphone found on this computer.'
+        : error?.name === 'NotReadableError'
+          ? 'The microphone is in use by another app or blocked by the system.'
+          : error?.name === 'NotAllowedError'
+            ? 'The microphone was refused. On Windows, check Settings > Privacy & security > Microphone, including "Let desktop apps access your microphone".'
+            : `Couldn't open the microphone (${error?.name ?? error}).`
+    );
     return;
   }
   if (conversationId !== selectedId) {
