@@ -222,6 +222,9 @@ export async function markRead({
     return { ok: false, code: ErrorCode.InvalidArgument };
   }
 
+  // As Signal on opening a chat: reading it clears a manual "mark as
+  // unread", which markRead alone leaves set.
+  model.setMarkedUnread(false);
   // The model-level call, not the Redux thunk, which does nothing unless
   // Signal's own window is active (decision D9). Receipts follow the user's
   // read-receipt setting as usual.

@@ -487,3 +487,19 @@ DECISION: Under the same `settings.manage` capability (no new approval):
 
 WHY: The promised second round of Mike's "replicate the entire Settings
 menu" (2026-10-12).
+
+## F13. Fork only: reading a chat clears "mark as unread"; quotes jump
+
+DECISION: `messages.markRead` also clears a manual "mark as unread"
+(setMarkedUnread(false)), as Signal does when a chat is opened; before,
+such a chat kept its dot no matter what. The page asks Signal to mark the
+open chat read when it opens, when messages arrive, when the tab gains
+focus, when the reader scrolls to the newest message or clicks in the
+page, and once more after a call that was in flight when another was
+asked for. A click on a reply's quote scrolls to the original (found by its
+sent time and author), loading older pages as needed, and flashes it; if
+it isn't there, the page says "Original message not found", as Signal.
+
+WHY: Mike (2026-10-12 18:20 PT): some chats stayed unread after reading
+them, and Signal's quote jump was missing.
+

@@ -107,6 +107,8 @@ export class FakeBridge {
   // conversationId -> [{ conversationId, author }]
   members = new Map();
   stickers = { packs: [], recents: [] };
+  // messages.list page size; unset returns everything at once.
+  pageSize = 0;
   settings = {
     emojiSkinTone: '',
     linkPreviews: true,
@@ -370,12 +372,24 @@ export class FakeBridge {
           members: this.members.get(params.conversationId) ?? [],
         });
         return;
-      case 'messages.list':
+      case 'messages.list': {
+        const all = this.messages.get(params.conversationId) ?? [];
+        if (!this.pageSize) {
+          this.#reply(session, id, { messages: all, nextCursor: null });
+          return;
+        }
+        // Newest first, a page at a time; the cursor is the oldest so far.
+        const sorted = [...all].sort((a, b) => a.sentAt - b.sentAt);
+        const end = params.cursor
+          ? sorted.findIndex(m => m.id === params.cursor)
+          : sorted.length;
+        const start = Math.max(0, end - this.pageSize);
         this.#reply(session, id, {
-          messages: this.messages.get(params.conversationId) ?? [],
-          nextCursor: null,
+          messages: sorted.slice(start, end),
+          nextCursor: start > 0 ? sorted[start].id : null,
         });
         return;
+      }
       case 'messages.sendText': {
         const reason = this.sendRefusals.get(params.conversationId);
         if (reason) {

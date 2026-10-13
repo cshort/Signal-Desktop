@@ -20,6 +20,8 @@ let nextCursor = null;
 let bridgeState = 'offline';
 let helperConnected = false;
 let markReadInFlight = false;
+// A mark-read was asked for while one was in flight: run again after.
+let markReadAgain = false;
 let replyTo = null;
 // The message being edited, if any.
 let editing = null;
@@ -611,8 +613,62 @@ function nameLine(name, author, className) {
   return line;
 }
 
+// As Signal: a click on a reply's quote scrolls to the original, loading
+// older messages until it's there, and highlights it briefly.
+const MAX_QUOTE_PAGES = 50;
+let quoteJump = 0;
+
+function findQuoted(quote) {
+  return sortedMessages().find(
+    m =>
+      m.sentAt === quote.sentAt &&
+      (quote.authorConversationId === null ||
+        m.authorConversationId === quote.authorConversationId)
+  );
+}
+
+async function jumpToQuote(quote) {
+  const conversationId = selectedId;
+  const jump = ++quoteJump;
+  let found = findQuoted(quote);
+  for (let page = 0; !found && nextCursor && page < MAX_QUOTE_PAGES; page++) {
+    try {
+      // oxlint-disable-next-line no-await-in-loop
+      await loadMessages({ older: true });
+    } catch (error) {
+      toast(`Couldn't load older messages (${error.code ?? error.message}).`);
+      return;
+    }
+    if (conversationId !== selectedId || jump !== quoteJump) {
+      return;
+    }
+    found = findQuoted(quote);
+  }
+  const li =
+    found &&
+    $('message-list').querySelector(`[data-id="${CSS.escape(found.id)}"]`);
+  if (!li) {
+    toast('Original message not found.');
+    return;
+  }
+  li.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  li.classList.remove('flash');
+  // Restart the animation when the same message is picked twice.
+  void li.offsetWidth;
+  li.classList.add('flash');
+  setTimeout(() => li.classList.remove('flash'), 1600);
+}
+
 function renderQuote(quote) {
   const box = el('span', 'quote');
+  if (quote.sentAt !== null) {
+    box.classList.add('jumps');
+    box.title = 'Go to message';
+    box.addEventListener('click', ev => {
+      ev.stopPropagation();
+      jumpToQuote(quote);
+    });
+  }
   const author = quote.author ?? authorOf(quote.authorConversationId);
   if (author?.nameColor) {
     box.classList.add(`nc-${author.nameColor}`);
@@ -1389,9 +1445,12 @@ async function selectConversation(id) {
 // Marks the open chat read in Signal, only while the user can see it.
 async function maybeMarkRead() {
   const c = conversations.get(selectedId);
+  if (markReadInFlight) {
+    markReadAgain = true;
+    return;
+  }
   if (
     !c ||
-    markReadInFlight ||
     document.visibilityState !== 'visible' ||
     !document.hasFocus() ||
     !(c.unreadCount > 0 || c.markedUnread)
@@ -1412,6 +1471,10 @@ async function maybeMarkRead() {
     // Signal sends conversation.updated when the count changes; nothing to do.
   } finally {
     markReadInFlight = false;
+  }
+  if (markReadAgain) {
+    markReadAgain = false;
+    maybeMarkRead();
   }
 }
 
@@ -4454,6 +4517,19 @@ document.addEventListener('keydown', e => {
   }
 });
 $('messages').addEventListener('scroll', closePopovers, { passive: true });
+// As Signal: reaching the newest message marks the chat read.
+$('messages').addEventListener(
+  'scroll',
+  () => {
+    const box = $('messages');
+    if (box.scrollHeight - box.scrollTop - box.clientHeight < 80) {
+      maybeMarkRead();
+    }
+  },
+  { passive: true }
+);
+// Rambox may not move window focus on a click into the page.
+document.addEventListener('pointerdown', () => setTimeout(maybeMarkRead, 0));
 window.addEventListener('focus', maybeMarkRead);
 document.addEventListener('visibilitychange', maybeMarkRead);
 // Relative times in the list ("5m") move on.

@@ -2726,3 +2726,23 @@ label.poll-option {
 .row-bottom .status-icon {
   color: var(--muted);
 }
+
+/* A reply's quote takes you to the original, which flashes. */
+.quote.jumps {
+  cursor: pointer;
+}
+
+.msg.flash .bubble,
+.msg.flash .sticker {
+  animation: quote-flash 1.6s ease-out;
+}
+
+@keyframes quote-flash {
+  0%,
+  40% {
+    box-shadow: 0 0 0 3px var(--accent);
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
