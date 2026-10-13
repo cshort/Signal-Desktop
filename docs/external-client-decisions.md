@@ -617,3 +617,32 @@ chat keeps it as a draft to play, send or discard. The page needs the
 microphone, so the browser (Rambox) asks the first time.
 
 WHY: Next gap on Mike's standing parity rule (2026-10-13).
+
+## F20. Fork only: new chats and new groups
+
+DECISION: Signal's compose button. `contacts.list {forGroup?}` (needs
+`contacts.read`, whose approval line now says "See your contacts and chat
+details") returns the people Signal's "New chat" or "New group" list
+offers (the same selectors), with about, username and phone number only
+where Signal shows them. A new capability, `conversations.create` (one
+more line in the approval dialog), allows:
+
+- `conversations.find {query}`: a username (name.01) or phone number,
+  looked up with Signal's own lookupConversationWithoutServiceId, so it
+  asks Signal's server exactly as Signal's search does;
+- `conversations.open {conversationId}`: a contact or group Signal's
+  composer offers;
+- `groups.create {name, memberIds, avatar?, disappearingSeconds?}`:
+  Signal's createGroupV2, with its 32-character name limit, its member
+  candidates and the profile photo's square JPEG for the photo.
+
+The first two and a new group return the chat, which then works with
+messages.list and messages.sendText before it has any messages (as an open
+chat in Signal) and joins the list with its first message.
+
+The page has Signal's pencil button by the search box: "New chat" lists
+"New group", Note to Self and your contacts, and finds a typed username or
+number; "New group" picks members (with chips), then name, photo and
+disappearing messages timer.
+
+WHY: Next gap on Mike's standing parity rule (2026-10-13).

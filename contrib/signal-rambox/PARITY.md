@@ -13,20 +13,20 @@ Last reviewed: 2026-10-13, against the Signal release in fork main.
 
 ## Chat list
 
-| Feature                                              | Status  | Notes  |
-| ---------------------------------------------------- | ------- | ------ |
-| Chats with photos, previews, times, unread counts    | done    | F1, F3 |
-| Pinned chats in Signal's order                       | done    | F3     |
-| All / 1:1 / Groups tabs, unread filter               | done    | F3     |
-| Delivery checkmarks on your last message             | done    | F9     |
-| Drafts kept per chat                                 | done    |        |
-| Filter chats by name                                 | done    |        |
-| Archived chats view                                  | done    | F15    |
-| Pin, unpin, archive, mute, mark unread from the list | done    | F15    |
-| Search messages across chats                         | done    | F17    |
-| New chat, find by username or number                 | missing |        |
-| New group                                            | missing |        |
-| Message requests (accept, block, delete)             | done    | F15    |
+| Feature                                              | Status | Notes  |
+| ---------------------------------------------------- | ------ | ------ |
+| Chats with photos, previews, times, unread counts    | done   | F1, F3 |
+| Pinned chats in Signal's order                       | done   | F3     |
+| All / 1:1 / Groups tabs, unread filter               | done   | F3     |
+| Delivery checkmarks on your last message             | done   | F9     |
+| Drafts kept per chat                                 | done   |        |
+| Filter chats by name                                 | done   |        |
+| Archived chats view                                  | done   | F15    |
+| Pin, unpin, archive, mute, mark unread from the list | done   | F15    |
+| Search messages across chats                         | done   | F17    |
+| New chat, find by username or number                 | done   | F20    |
+| New group                                            | done   | F20    |
+| Message requests (accept, block, delete)             | done   | F15    |
 
 ## Conversation
 

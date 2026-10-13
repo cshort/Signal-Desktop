@@ -55,7 +55,9 @@ Photos, member labels, reactions and replies use fork-only bridge additions
 `conversations.setTyping` and the `typing` topic (`typing.send`,
 `typing.read`), `conversations.update` (`conversations.manage`),
 `conversations.getDetails` (`contacts.read`), `messages.search`, `newer`
-on `messages.list`, `voiceNote` on `attachments.uploadBegin` and
+on `messages.list`, `voiceNote` on `attachments.uploadBegin`,
+`contacts.list`, `conversations.find`, `conversations.open` and
+`groups.create` (`conversations.create`) and
 `attachmentUploadIds` on
 `messages.sendText`, and pin order, formatting and link previews on the
 DTOs),

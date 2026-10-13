@@ -114,7 +114,7 @@ export async function setProfile(
   return profileResult();
 }
 
-async function toAvatarBytes(
+export async function toAvatarBytes(
   data: string
 ): Promise<Uint8Array<ArrayBuffer> | undefined> {
   const bytes = Buffer.from(data, 'base64');

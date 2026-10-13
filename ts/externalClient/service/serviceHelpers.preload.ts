@@ -36,7 +36,18 @@ export function getListedConversation(
   if (!model || model.id !== conversationId) {
     return undefined;
   }
-  return isListedConversation(model.format()) ? model : undefined;
+  return isListedConversation(model.format()) ||
+    openedConversationIds.has(conversationId)
+    ? model
+    : undefined;
+}
+
+// Fork addition (F20): chats opened from Signal's compose button, which act
+// as listed before their first message, as an open chat does in Signal.
+const openedConversationIds = new Set<string>();
+
+export function markConversationOpened(conversationId: string): void {
+  openedConversationIds.add(conversationId);
 }
 
 const SEND_STATUS: Record<LastMessageStatus, MessageSendStatusType> = {

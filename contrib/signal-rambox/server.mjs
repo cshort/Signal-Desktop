@@ -138,7 +138,9 @@ export function checkRequest(req, { origins, token }) {
   if (req.method === 'POST') {
     const type = (req.headers['content-type'] ?? '').split(';')[0].trim();
     const upload =
-      path.endsWith('/api/upload') || path.endsWith('/api/profilePhoto');
+      path.endsWith('/api/upload') ||
+      path.endsWith('/api/profilePhoto') ||
+      path.endsWith('/api/groups');
     if (type !== (upload ? 'application/octet-stream' : 'application/json')) {
       return [415, 'wrong content type'];
     }
@@ -597,6 +599,53 @@ export function createWebServer({
         familyName,
         aboutText,
         aboutEmoji,
+      });
+      sendJson(res, 200, result);
+      return;
+    }
+    // Signal's compose button: contacts, finding people, new groups.
+    if (req.method === 'GET' && route === 'api/contacts') {
+      const forGroup = url.searchParams.get('forGroup') === '1';
+      sendJson(
+        res,
+        200,
+        await bridge.call('contacts.list', forGroup ? { forGroup } : {})
+      );
+      return;
+    }
+    if (req.method === 'POST' && route === 'api/find') {
+      const { query } = await readJson(req);
+      sendJson(res, 200, await bridge.call('conversations.find', { query }));
+      return;
+    }
+    if (req.method === 'POST' && route === 'api/open') {
+      const { conversationId } = await readJson(req);
+      sendJson(
+        res,
+        200,
+        await bridge.call('conversations.open', { conversationId })
+      );
+      return;
+    }
+    if (req.method === 'POST' && route === 'api/groups') {
+      // The group's details in the query; the body is its photo, if any.
+      let group;
+      try {
+        group = JSON.parse(url.searchParams.get('group') ?? '');
+      } catch {
+        group = null;
+      }
+      const bytes = await readBytes(req, MAX_PROFILE_PHOTO_BYTES);
+      if (!group || typeof group !== 'object' || !bytes) {
+        sendJson(res, 400, { error: { code: 'INVALID_ARGUMENT' } });
+        return;
+      }
+      const { name, memberIds, disappearingSeconds } = group;
+      const result = await bridge.call('groups.create', {
+        name,
+        memberIds,
+        ...(disappearingSeconds != null ? { disappearingSeconds } : {}),
+        ...(bytes.length > 0 ? { avatar: bytes.toString('base64') } : {}),
       });
       sendJson(res, 200, result);
       return;

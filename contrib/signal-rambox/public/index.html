@@ -35,6 +35,13 @@
             <button
               type="button"
               class="icon-button"
+              id="compose-open"
+              title="New chat"
+              aria-label="New chat"
+            ></button>
+            <button
+              type="button"
+              class="icon-button"
               id="filter-unread"
               title="Filter by unread"
               aria-label="Filter by unread"
@@ -210,6 +217,67 @@
         <div class="modal-foot">
           <span id="forward-count" class="sub"></span>
           <button type="button" id="forward-send" disabled>Forward</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-backdrop" id="new-chat" hidden>
+      <div class="modal" role="dialog" aria-labelledby="new-chat-title">
+        <div class="modal-head">
+          <button
+            type="button"
+            class="icon-button"
+            id="new-chat-back"
+            title="Back"
+            aria-label="Back"
+            hidden
+          ></button>
+          <span id="new-chat-title">New chat</span>
+          <button
+            type="button"
+            class="icon-button"
+            id="new-chat-close"
+            title="Close"
+            aria-label="Close"
+          ></button>
+        </div>
+        <div id="new-chat-pick">
+          <input
+            id="new-chat-search"
+            type="search"
+            placeholder="Name, username or number"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <div class="new-chat-chips" id="new-chat-chips" hidden></div>
+          <ul class="forward-list new-chat-list" id="new-chat-list"></ul>
+        </div>
+        <div class="new-group-info" id="new-group-info" hidden>
+          <button
+            type="button"
+            class="new-group-photo"
+            id="new-group-photo"
+            title="Add a group photo"
+            aria-label="Add a group photo"
+          ></button>
+          <input
+            id="new-group-photo-input"
+            type="file"
+            accept="image/*"
+            hidden
+          />
+          <label class="field">
+            <span>Group name (required)</span>
+            <input id="new-group-name" type="text" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span>Disappearing messages</span>
+            <select id="new-group-timer"></select>
+          </label>
+          <div class="sub" id="new-group-members"></div>
+        </div>
+        <div class="modal-foot" id="new-chat-foot" hidden>
+          <span id="new-chat-count" class="sub"></span>
+          <button type="button" id="new-chat-next">Next</button>
         </div>
       </div>
     </div>

@@ -39,6 +39,12 @@ import {
 import { updateConversation } from './ExternalClientChats.preload.ts';
 import { getDetails } from './ExternalClientDetails.preload.ts';
 import { searchMessages } from './ExternalClientSearch.preload.ts';
+import {
+  createGroup,
+  findConversation,
+  listContacts,
+  openConversation,
+} from './ExternalClientCompose.preload.ts';
 import { getMembers } from './ExternalClientMentions.preload.ts';
 import {
   getProfile,
@@ -401,6 +407,34 @@ async function dispatch(
       }
       const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
       return params.success ? getDetails(params.data) : invalid;
+    }
+    case Method.ContactsList: {
+      if (!window.ConversationController.isInitialFetchComplete()) {
+        return notReady;
+      }
+      const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
+      return params.success ? listContacts(params.data) : invalid;
+    }
+    case Method.ConversationsFind: {
+      if (!window.ConversationController.isInitialFetchComplete()) {
+        return notReady;
+      }
+      const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
+      return params.success ? findConversation(params.data) : invalid;
+    }
+    case Method.ConversationsOpen: {
+      if (!window.ConversationController.isInitialFetchComplete()) {
+        return notReady;
+      }
+      const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
+      return params.success ? openConversation(params.data) : invalid;
+    }
+    case Method.GroupsCreate: {
+      if (!window.ConversationController.isInitialFetchComplete()) {
+        return notReady;
+      }
+      const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
+      return params.success ? createGroup(params.data) : invalid;
     }
     case Method.MessagesSearch: {
       if (!window.ConversationController.isInitialFetchComplete()) {

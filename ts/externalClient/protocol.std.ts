@@ -53,6 +53,9 @@ export const Capability = {
   // Fork addition: pin, archive, mute, block, accept and delete chats, and
   // set their disappearing timer, as Signal's chat menus do.
   ConversationsManage: 'conversations.manage',
+  // Fork addition: start new chats (find people by username or phone number)
+  // and create groups, as Signal's compose button does.
+  ConversationsCreate: 'conversations.create',
 } as const;
 export type CapabilityType = (typeof Capability)[keyof typeof Capability];
 export const ALL_CAPABILITIES: ReadonlyArray<CapabilityType> =
@@ -73,6 +76,7 @@ export const IMPLEMENTED_CAPABILITIES: ReadonlyArray<CapabilityType> = [
   Capability.TypingSend,
   Capability.ConversationsManage,
   Capability.ContactsRead,
+  Capability.ConversationsCreate,
 ];
 
 export const ErrorCode = {
@@ -153,6 +157,10 @@ export const Method = {
   ConversationsUpdate: 'conversations.update',
   ConversationsGetDetails: 'conversations.getDetails',
   MessagesSearch: 'messages.search',
+  ContactsList: 'contacts.list',
+  ConversationsFind: 'conversations.find',
+  ConversationsOpen: 'conversations.open',
+  GroupsCreate: 'groups.create',
 } as const;
 export type MethodType = (typeof Method)[keyof typeof Method];
 
@@ -193,6 +201,10 @@ export const SERVICE_METHOD_CAPABILITIES = {
   [Method.ConversationsUpdate]: Capability.ConversationsManage,
   [Method.ConversationsGetDetails]: Capability.ContactsRead,
   [Method.MessagesSearch]: Capability.MessagesRead,
+  [Method.ContactsList]: Capability.ContactsRead,
+  [Method.ConversationsFind]: Capability.ConversationsCreate,
+  [Method.ConversationsOpen]: Capability.ConversationsCreate,
+  [Method.GroupsCreate]: Capability.ConversationsCreate,
 } as const satisfies Partial<Record<MethodType, CapabilityType>>;
 export type ServiceMethodType = keyof typeof SERVICE_METHOD_CAPABILITIES;
 
@@ -1155,6 +1167,68 @@ export type MessagesSearchResultType = Readonly<{
   results: ReadonlyArray<SearchResultDTO>;
 }>;
 
+// Fork additions: Signal's compose button (decision F20). contacts.list is
+// the people its "New chat" and "New group" lists offer.
+export const contactsListParamsSchema = z
+  .object({ forGroup: z.boolean().optional() })
+  .strict();
+export type ContactsListParamsType = z.infer<typeof contactsListParamsSchema>;
+
+export type ContactDTO = Readonly<{
+  conversationId: string;
+  title: string;
+  avatarColor: string | null;
+  avatarVersion: string | null;
+  noteToSelf: boolean;
+  // As in ConversationDetailsDTO: only where Signal shows them.
+  about: string | null;
+  username: string | null;
+  phoneNumber: string | null;
+}>;
+
+export type ContactsListResultType = Readonly<{
+  contacts: ReadonlyArray<ContactDTO>;
+}>;
+
+// A username (with its discriminator) or a phone number, as typed in
+// Signal's "New chat" search; Signal asks its server who it is.
+export const conversationsFindParamsSchema = z
+  .object({ query: z.string().min(1).max(64) })
+  .strict();
+export type ConversationsFindParamsType = z.infer<
+  typeof conversationsFindParamsSchema
+>;
+
+// Opens a chat with a contact from contacts.list or conversations.find, so
+// messages.list and messages.sendText work before it has any messages.
+export const conversationsOpenParamsSchema = z
+  .object({ conversationId: conversationIdSchema })
+  .strict();
+export type ConversationsOpenParamsType = z.infer<
+  typeof conversationsOpenParamsSchema
+>;
+
+export type ConversationsOpenResultType = Readonly<{
+  conversation: ConversationDTO;
+}>;
+
+// Signal's "New group": a name, members from contacts.list (forGroup), an
+// optional photo (base64, any image; Signal's square JPEG is made from it)
+// and the disappearing messages timer.
+export const MAX_GROUP_NAME_GRAPHEMES = 32;
+export const groupsCreateParamsSchema = z
+  .object({
+    name: z.string().min(1).max(256),
+    memberIds: z.array(conversationIdSchema).max(1000),
+    avatar: z
+      .string()
+      .max(Math.ceil(MAX_PROFILE_AVATAR_BYTES / 3) * 4)
+      .optional(),
+    disappearingSeconds: z.number().int().min(0).optional(),
+  })
+  .strict();
+export type GroupsCreateParamsType = z.infer<typeof groupsCreateParamsSchema>;
+
 export type TypistDTO = Readonly<{
   authorConversationId: string;
   author: AuthorDTO | null;
@@ -1233,6 +1307,10 @@ export const SERVICE_PARAM_SCHEMAS = {
   [Method.ConversationsUpdate]: conversationsUpdateParamsSchema,
   [Method.ConversationsGetDetails]: conversationsGetDetailsParamsSchema,
   [Method.MessagesSearch]: messagesSearchParamsSchema,
+  [Method.ContactsList]: contactsListParamsSchema,
+  [Method.ConversationsFind]: conversationsFindParamsSchema,
+  [Method.ConversationsOpen]: conversationsOpenParamsSchema,
+  [Method.GroupsCreate]: groupsCreateParamsSchema,
 } as const satisfies Record<ServiceMethodType, z.ZodType>;
 
 export type ConversationsListParamsType = z.infer<

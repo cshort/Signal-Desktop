@@ -569,6 +569,336 @@ function renderConversations() {
   $('conversations').replaceChildren(...rows);
 }
 
+// --- new chat and new group (Signal's compose button) -----------------------
+
+// 'chat' | 'members' | 'info' while the dialog is open.
+let composeStep = null;
+let composeContacts = [];
+const groupMembers = new Map();
+let groupPhoto = null;
+let groupPhotoUrl = null;
+
+function canCreateChats() {
+  return capabilities.includes('conversations.create');
+}
+
+// What Signal's search finds people by: a username (name.01) or a number.
+function looksFindable(query) {
+  return (
+    /^@?[a-z_][a-z0-9_]{2,31}\.\d{2,10}$/i.test(query) ||
+    /^\+?[\d\s().-]{6,20}$/.test(query)
+  );
+}
+
+function contactAsChat(contact) {
+  return {
+    id: contact.conversationId,
+    type: 'direct',
+    title: contact.title,
+    avatarColor: contact.avatarColor,
+    avatarVersion: contact.avatarVersion,
+    noteToSelf: contact.noteToSelf,
+  };
+}
+
+function matchesContact(contact, query) {
+  const q = query.toLowerCase().replace(/^@/, '');
+  return (
+    !q ||
+    contact.title.toLowerCase().includes(q) ||
+    (contact.username ?? '').toLowerCase().includes(q) ||
+    (contact.phoneNumber ?? '')
+      .replace(/[^\d+]/g, '')
+      .includes(q.replace(/[^\d+]/g, '') || '\u0000')
+  );
+}
+
+async function openNewChat() {
+  if (!capabilities.includes('contacts.read') || !canCreateChats()) {
+    toast('Allow this page to start new chats in Signal to use this.');
+    return;
+  }
+  groupMembers.clear();
+  clearGroupPhoto();
+  $('new-group-name').value = '';
+  $('new-chat').hidden = false;
+  await showComposeStep('chat');
+}
+
+function closeNewChat() {
+  composeStep = null;
+  $('new-chat').hidden = true;
+  clearGroupPhoto();
+}
+
+async function showComposeStep(step) {
+  composeStep = step;
+  const picking = step !== 'info';
+  $('new-chat-title').textContent =
+    step === 'chat'
+      ? 'New chat'
+      : step === 'members'
+        ? 'Add members'
+        : 'Name this group';
+  $('new-chat-back').hidden = step === 'chat';
+  $('new-chat-pick').hidden = !picking;
+  $('new-group-info').hidden = picking;
+  $('new-chat-foot').hidden = step === 'chat';
+  $('new-chat-next').textContent = step === 'info' ? 'Create' : 'Next';
+  if (picking) {
+    $('new-chat-search').value = '';
+    $('new-chat-search').placeholder =
+      step === 'chat' ? 'Name, username or number' : 'Search contacts';
+    try {
+      const { contacts } = await api(
+        `api/contacts${step === 'members' ? '?forGroup=1' : ''}`
+      );
+      composeContacts = contacts;
+    } catch (error) {
+      toast(`Couldn't load contacts (${error.code ?? error.message}).`);
+      composeContacts = [];
+    }
+    renderComposeList();
+    $('new-chat-search').focus();
+  } else {
+    renderGroupInfo();
+    $('new-group-name').focus();
+  }
+}
+
+function composeRow(chat, label, sub, onClick) {
+  const li = el('li');
+  li.append(conversationAvatar(chat, 36));
+  const text = el('span', 'row-text');
+  text.append(el('span', 'title', label));
+  if (sub) {
+    text.append(el('span', 'sub', sub));
+  }
+  li.append(text);
+  li.addEventListener('click', onClick);
+  return li;
+}
+
+function renderComposeList() {
+  const query = $('new-chat-search').value.trim();
+  const found = composeContacts.filter(c => matchesContact(c, query));
+  const rows = [];
+  if (composeStep === 'chat') {
+    if (!query) {
+      rows.push(
+        composeRow(
+          { id: 'new-group', type: 'group', title: 'New group' },
+          'New group',
+          null,
+          () => showComposeStep('members')
+        )
+      );
+    }
+    if (query && looksFindable(query)) {
+      rows.push(
+        composeRow(
+          { id: 'find', type: 'direct', title: query.replace(/^@/, '') },
+          `Find ${query}`,
+          'Look up this username or phone number in Signal',
+          () => findAndOpen(query)
+        )
+      );
+    }
+    for (const contact of found) {
+      rows.push(
+        composeRow(
+          contactAsChat(contact),
+          contact.noteToSelf ? 'Note to Self' : contact.title,
+          contact.about ?? contact.username ?? null,
+          () => openContact(contact.conversationId)
+        )
+      );
+    }
+  } else {
+    for (const contact of found) {
+      const li = el('li');
+      const box = el('input');
+      box.type = 'checkbox';
+      box.checked = groupMembers.has(contact.conversationId);
+      li.append(
+        box,
+        conversationAvatar(contactAsChat(contact), 36),
+        el('span', 'title', contact.title)
+      );
+      li.classList.toggle('checked', box.checked);
+      li.addEventListener('click', e => {
+        if (e.target !== box) {
+          box.checked = !box.checked;
+        }
+        if (box.checked) {
+          groupMembers.set(contact.conversationId, contact);
+        } else {
+          groupMembers.delete(contact.conversationId);
+        }
+        renderComposeList();
+      });
+      rows.push(li);
+    }
+  }
+  if (rows.length === 0) {
+    rows.push(el('li', 'list-empty', 'No contacts found'));
+  }
+  $('new-chat-list').replaceChildren(...rows);
+  renderMemberChips();
+}
+
+function renderMemberChips() {
+  const chips = $('new-chat-chips');
+  chips.hidden = composeStep !== 'members' || groupMembers.size === 0;
+  chips.replaceChildren(
+    ...[...groupMembers.values()].map(contact => {
+      const chip = el('button', 'chip');
+      chip.type = 'button';
+      chip.title = `Remove ${contact.title}`;
+      chip.append(el('span', '', contact.title), icon('close'));
+      chip.addEventListener('click', () => {
+        groupMembers.delete(contact.conversationId);
+        renderComposeList();
+      });
+      return chip;
+    })
+  );
+  const count = groupMembers.size;
+  $('new-chat-count').textContent =
+    composeStep === 'members' ? `${count} member${count === 1 ? '' : 's'}` : '';
+  if (composeStep === 'members') {
+    $('new-chat-next').textContent = count === 0 ? 'Skip' : 'Next';
+    $('new-chat-next').disabled = false;
+  }
+}
+
+function renderGroupInfo() {
+  const timer = $('new-group-timer');
+  if (timer.options.length === 0) {
+    timer.append(
+      ...TIMER_CHOICES.map(([seconds, label]) => {
+        const option = el('option', '', label);
+        option.value = String(seconds);
+        return option;
+      })
+    );
+  }
+  const count = groupMembers.size;
+  $('new-group-members').textContent =
+    count === 0
+      ? 'Just you, for now.'
+      : `You and ${[...groupMembers.values()].map(c => c.title).join(', ')}`;
+  renderGroupPhoto();
+  updateGroupNext();
+}
+
+function groupNameLength() {
+  return [...segmenter.segment($('new-group-name').value.trim())].length;
+}
+
+function updateGroupNext() {
+  if (composeStep !== 'info') {
+    return;
+  }
+  const length = groupNameLength();
+  // Signal's limit for a group name.
+  $('new-chat-next').disabled = length === 0 || length > 32;
+  $('new-chat-count').textContent = length > 0 ? `${length}/32` : '';
+}
+
+function renderGroupPhoto() {
+  const button = $('new-group-photo');
+  if (groupPhotoUrl) {
+    const img = el('img');
+    img.src = groupPhotoUrl;
+    img.alt = '';
+    button.replaceChildren(img);
+  } else {
+    button.replaceChildren(icon('group'));
+  }
+}
+
+function clearGroupPhoto() {
+  if (groupPhotoUrl) {
+    URL.revokeObjectURL(groupPhotoUrl);
+  }
+  groupPhoto = null;
+  groupPhotoUrl = null;
+}
+
+// The chat becomes part of the list, then opens, as from Signal's composer.
+async function showOpened(conversation) {
+  conversations.set(conversation.id, conversation);
+  closeNewChat();
+  renderConversations();
+  await selectConversation(conversation.id);
+}
+
+async function openContact(conversationId) {
+  if (conversations.has(conversationId)) {
+    closeNewChat();
+    await selectConversation(conversationId);
+    return;
+  }
+  try {
+    const { conversation } = await api('api/open', { conversationId });
+    await showOpened(conversation);
+  } catch (error) {
+    toast(`Couldn't open the chat (${error.code ?? error.message}).`);
+  }
+}
+
+async function findAndOpen(query) {
+  try {
+    const { conversation } = await api('api/find', { query });
+    await showOpened(conversations.get(conversation.id) ?? conversation);
+  } catch (error) {
+    toast(
+      error.code === 'NOT_FOUND'
+        ? `${query} isn't a Signal user.`
+        : error.code === 'INVALID_ARGUMENT'
+          ? 'Enter a username like name.01, or a phone number.'
+          : `Couldn't look that up (${error.code ?? error.message}).`
+    );
+  }
+}
+
+async function composeNext() {
+  if (composeStep === 'members') {
+    await showComposeStep('info');
+    return;
+  }
+  if (composeStep !== 'info' || $('new-chat-next').disabled) {
+    return;
+  }
+  const group = {
+    name: $('new-group-name').value.trim(),
+    memberIds: [...groupMembers.keys()],
+    disappearingSeconds: Number($('new-group-timer').value),
+  };
+  $('new-chat-next').disabled = true;
+  try {
+    const res = await fetch(
+      `api/groups?${new URLSearchParams({ group: JSON.stringify(group) })}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: groupPhoto ?? new Blob([]),
+      }
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.error) {
+      throw Object.assign(new Error(`HTTP ${res.status}`), {
+        code: data.error?.code,
+      });
+    }
+    await showOpened(data.conversation);
+  } catch (error) {
+    toast(`Couldn't create the group (${error.code ?? error.message}).`);
+    updateGroupNext();
+  }
+}
+
 // --- message search (Signal's search box) -----------------------------------
 
 // Searching in one chat (from its menu), or null for all chats.
@@ -5790,6 +6120,51 @@ window.addEventListener('blur', () => {
     stopRecording({ send: false });
   }
 });
+$('compose-open').append(icon('edit'));
+$('compose-open').addEventListener('click', openNewChat);
+$('new-chat-close').append(icon('close'));
+$('new-chat-close').addEventListener('click', closeNewChat);
+$('new-chat-back').append(icon('back'));
+$('new-chat-back').addEventListener('click', () =>
+  showComposeStep(composeStep === 'info' ? 'members' : 'chat')
+);
+$('new-chat-search').addEventListener('input', renderComposeList);
+$('new-chat-search').addEventListener('keydown', e => {
+  const query = $('new-chat-search').value.trim();
+  if (e.key === 'Enter' && composeStep === 'chat' && looksFindable(query)) {
+    findAndOpen(query);
+  }
+});
+$('new-chat-next').addEventListener('click', composeNext);
+$('new-group-name').addEventListener('input', updateGroupNext);
+$('new-group-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    composeNext();
+  }
+});
+$('new-group-photo').addEventListener('click', () =>
+  $('new-group-photo-input').click()
+);
+$('new-group-photo-input').addEventListener('change', () => {
+  const [file] = $('new-group-photo-input').files;
+  $('new-group-photo-input').value = '';
+  if (!file) {
+    return;
+  }
+  if (file.size > 600 * 1024) {
+    toast('That photo is too large (600 KB at most).');
+    return;
+  }
+  clearGroupPhoto();
+  groupPhoto = file;
+  groupPhotoUrl = URL.createObjectURL(file);
+  renderGroupPhoto();
+});
+$('new-chat').addEventListener('click', e => {
+  if (e.target === $('new-chat')) {
+    closeNewChat();
+  }
+});
 $('poll-open').append(icon('poll'));
 $('poll-open').addEventListener('click', openPollCompose);
 $('poll-compose-close').append(icon('close'));
@@ -5900,6 +6275,8 @@ document.addEventListener('keydown', e => {
     closeLightbox();
     if (!$('forward').hidden) {
       closeForward();
+    } else if (!$('new-chat').hidden) {
+      closeNewChat();
     } else {
       closePollCompose();
       closePollVotes();

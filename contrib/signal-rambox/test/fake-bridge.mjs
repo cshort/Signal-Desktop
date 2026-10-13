@@ -162,7 +162,11 @@ export class FakeBridge {
     'typing.send',
     'conversations.manage',
     'contacts.read',
+    'conversations.create',
   ];
+  // contacts.list and conversations.find.
+  contacts = [];
+  findable = new Map();
   // `${messageId}:${index}` -> { contentType, bytes }
   attachments = new Map();
   // conversationId -> { avatarVersion, contentType, data }
@@ -494,6 +498,54 @@ export class FakeBridge {
           }),
         });
         return;
+      case 'contacts.list': {
+        this.#reply(session, id, {
+          contacts: this.contacts.filter(
+            c => !params.forGroup || !c.noteToSelf
+          ),
+        });
+        return;
+      }
+      case 'conversations.find': {
+        const found = this.findable.get(params.query);
+        if (!found) {
+          this.#error(session, id, 'NOT_FOUND', undefined);
+          return;
+        }
+        this.#reply(session, id, { conversation: found });
+        return;
+      }
+      case 'conversations.open': {
+        const contact = this.contacts.find(
+          c => c.conversationId === params.conversationId
+        );
+        if (!contact) {
+          this.#error(session, id, 'NOT_FOUND', undefined);
+          return;
+        }
+        const conversation = makeConversation({
+          id: contact.conversationId,
+          title: contact.title,
+          lastActivityAt: null,
+        });
+        this.messages.set(
+          conversation.id,
+          this.messages.get(conversation.id) ?? []
+        );
+        this.#reply(session, id, { conversation });
+        return;
+      }
+      case 'groups.create': {
+        const conversation = makeConversation({
+          title: params.name,
+          type: 'group',
+          memberCount: params.memberIds.length + 1,
+        });
+        this.conversations.push(conversation);
+        this.messages.set(conversation.id, []);
+        this.#reply(session, id, { conversation });
+        return;
+      }
       case 'conversations.getDetails': {
         const details = this.details.get(params.conversationId);
         if (!details) {

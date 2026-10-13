@@ -4583,7 +4583,11 @@
     "description": "Permission shown in the local app access dialog"
   },
   "icu:ExternalClientCapability__contacts-read": {
-    "messageformat": "See chat details: names, about, phone numbers and usernames where Signal shows them, and group members",
+    "messageformat": "See your contacts and chat details: names, about, phone numbers and usernames where Signal shows them, and group members",
+    "description": "Permission shown in the local app access dialog"
+  },
+  "icu:ExternalClientCapability__conversations-create": {
+    "messageformat": "Start new chats, find people by username or phone number, and create groups",
     "description": "Permission shown in the local app access dialog"
   },
   "icu:ExternalClientCapability__settings-manage": {

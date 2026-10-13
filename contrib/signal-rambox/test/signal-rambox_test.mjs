@@ -205,6 +205,7 @@ describe('signal-rambox', () => {
     assert.deepEqual(req.params.capabilities.sort(), [
       'attachments.read',
       'contacts.read',
+      'conversations.create',
       'conversations.manage',
       'conversations.read',
       'messages.markRead',
@@ -732,6 +733,38 @@ describe('signal-rambox', () => {
   it('serves the voice note encoder only when the image has it', async () => {
     const res = await http(port, { path: `/${helper.token}/mp3Encoder.js` });
     assert.equal(res.status, 404);
+  });
+
+  it("passes Signal's compose button on", async () => {
+    bridge.contacts = [{ conversationId: 'k1', title: 'Kim' }];
+    let res = await http(port, {
+      path: `/${helper.token}/api/contacts?forGroup=1`,
+    });
+    assert.equal(res.status, 200);
+    assert.equal(JSON.parse(res.text).contacts[0].title, 'Kim');
+    let call = bridge.calls.findLast(c => c.method === 'contacts.list');
+    assert.deepEqual(call.params, { forGroup: true });
+
+    res = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/find`,
+      headers: json,
+      body: { query: 'nobody.01' },
+    });
+    assert.equal(JSON.parse(res.text).error.code, 'NOT_FOUND');
+
+    const group = { name: 'Book club', memberIds: ['k1'], extra: 1 };
+    res = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/groups?group=${encodeURIComponent(
+        JSON.stringify(group)
+      )}`,
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: Buffer.alloc(0),
+    });
+    assert.equal(res.status, 200);
+    call = bridge.calls.findLast(c => c.method === 'groups.create');
+    assert.deepEqual(call.params, { name: 'Book club', memberIds: ['k1'] });
   });
 
   it('searches messages, in all chats or one', async () => {
