@@ -57,6 +57,8 @@ DTOs),
 not part of the upstream proposal. Against a Signal without them the helper
 asks only for what Signal offers and the rest of the page still works.
 
+What the page does and what it doesn't do yet, compared to Signal Desktop: [PARITY.md](PARITY.md).
+
 ## How it works
 
 ```

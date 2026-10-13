@@ -1,0 +1,102 @@
+# Parity with Signal Desktop
+
+Standing rule (Mike, 2026-10-13): the Rambox page does everything Signal
+Desktop does, and keeps up as Signal adds features. This is the list. Each
+built item has a decision (Fn) in
+[docs/external-client-decisions.md](../../docs/external-client-decisions.md).
+
+Status: **done**, **partial**, **missing**, or **different** (on purpose).
+A weekly check compares new Signal releases against this list and adds
+what they bring.
+
+Last reviewed: 2026-10-13, against the Signal release in fork main.
+
+## Chat list
+
+| Feature                                              | Status  | Notes                            |
+| ---------------------------------------------------- | ------- | -------------------------------- |
+| Chats with photos, previews, times, unread counts    | done    | F1, F3                           |
+| Pinned chats in Signal's order                       | done    | F3                               |
+| All / 1:1 / Groups tabs, unread filter               | done    | F3                               |
+| Delivery checkmarks on your last message             | done    | F9                               |
+| Drafts kept per chat                                 | done    |                                  |
+| Filter chats by name                                 | done    |                                  |
+| Archived chats view                                  | missing | archived chats are hidden only   |
+| Pin, unpin, archive, mute, mark unread from the list | missing |                                  |
+| Search messages across chats                         | missing |                                  |
+| New chat, find by username or number                 | missing |                                  |
+| New group                                            | missing |                                  |
+| Message requests (accept, block, delete)             | partial | shown; answering stays in Signal |
+
+## Conversation
+
+| Feature                                                  | Status  | Notes                                          |
+| -------------------------------------------------------- | ------- | ---------------------------------------------- |
+| Messages, author names and colors, member labels         | done    | F1                                             |
+| Reactions, who reacted                                   | done    | F1, viewer                                     |
+| Quoted replies, jump to the original                     | done    | F1, F13                                        |
+| Edit and delete (for me, for everyone)                   | done    | F3                                             |
+| Photos, videos, GIFs, files, voice notes (play)          | done    | F2                                             |
+| Long messages                                            | done    |                                                |
+| Polls (vote, end, create, send to many chats)            | done    | F6                                             |
+| Stickers (view and send)                                 | done    | F10                                            |
+| Link previews (view)                                     | done    |                                                |
+| Mark read as you read, clears "mark as unread"           | done    | F13                                            |
+| Typing indicators (see them)                             | missing |                                                |
+| Disappearing messages (expire on time)                   | done    |                                                |
+| View-once media                                          | missing |                                                |
+| Contact cards (view)                                     | missing |                                                |
+| Payments, gift badges                                    | missing |                                                |
+| Message details (per-recipient delivery)                 | missing |                                                |
+| Edit history                                             | missing |                                                |
+| Chat header: details, members, safety number             | missing |                                                |
+| Per-chat settings: timer, mute, block, colors, nickname  | missing |                                                |
+| Media, files and links gallery                           | missing |                                                |
+| Search inside a chat                                     | missing |                                                |
+| Group management (add/remove, admins, link, name, photo) | missing |                                                |
+| Poll-ended and other system notices                      | partial |                                                |
+| Stories (view, post, reply)                              | missing |                                                |
+| Calls (voice, video, group, call links)                  | missing | needs a microphone and camera path into Signal |
+
+## Composer
+
+| Feature                                         | Status    | Notes                |
+| ----------------------------------------------- | --------- | -------------------- |
+| Text, @mentions                                 | done      | F7                   |
+| Bold, italic, strikethrough, monospace, spoiler | done      | F8                   |
+| Emoji picker with skin tones                    | done      | F5, F11              |
+| Attach files, paste and drop images             | done      | F4                   |
+| Forward to any number of chats                  | different | F4: no limit of five |
+| Stickers                                        | done      | F10                  |
+| Send link previews                              | missing   |                      |
+| Record voice notes                              | missing   |                      |
+| Send contact cards                              | missing   |                      |
+| GIF search                                      | missing   |                      |
+| Typing indicators (send them)                   | missing   |                      |
+| Send view-once media                            | missing   |                      |
+| Sent media quality per message                  | missing   | the setting applies  |
+
+## Settings
+
+| Feature                                             | Status    | Notes                       |
+| --------------------------------------------------- | --------- | --------------------------- |
+| Profile: name, about, photo                         | done      | F12                         |
+| Username, username link and QR                      | partial   | shown; change it in Signal  |
+| Appearance (page theme)                             | done      | F11                         |
+| Chat colors and wallpapers                          | missing   |                             |
+| Chats, notifications, privacy, data usage           | done      | F11                         |
+| Blocked list                                        | done      | F12 (unblock from the chat) |
+| Stories on/off                                      | done      | F12                         |
+| Notification profiles                               | missing   |                             |
+| Language                                            | missing   | the page is English         |
+| Linked devices, backups, change number, delete data | different | stay in Signal on the phone |
+| Window, tray, zoom, spell check, launch at login    | different | no screen on Six            |
+
+## Everywhere
+
+| Feature                                                | Status  | Notes                     |
+| ------------------------------------------------------ | ------- | ------------------------- |
+| Notifications with Signal's content and sound settings | done    | F11                       |
+| Keyboard shortcuts (Signal's list)                     | partial | formatting, Escape, Enter |
+| Reconnects by itself                                   | done    |                           |
+| Release notes / what's new                             | missing |                           |
