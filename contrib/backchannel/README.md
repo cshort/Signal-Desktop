@@ -73,6 +73,29 @@ VNC viewer on `localhost:5901` after `screen.sh vnc`.
 In Rambox: **Add app > Add Custom App**, paste the address, and turn on
 notifications and "Display in tab" for the unread badge.
 
+### On Windows (Docker Desktop)
+
+Untested so far, but nothing in it is Linux-host specific: Docker Desktop
+runs the same x86-64 Linux container inside WSL 2.
+
+1. Install Docker Desktop (WSL 2 backend, its default) and a WSL
+   distribution such as Ubuntu (`wsl --install -d Ubuntu` in PowerShell).
+   In Docker Desktop, Settings > Resources > WSL integration, turn it on
+   for that distribution.
+2. Do the quick start inside the WSL shell (`wsl`), not in PowerShell, and
+   keep both the clone and the data folder in the WSL file system (for
+   example `~/Signal-Desktop` and `~/backchannel-data`, with
+   `BACKCHANNEL_DATA=/home/you/backchannel-data` and `BACKCHANNEL_UID`
+   set to the output of `id -u`). A folder on `C:` (`/mnt/c/...`) is much
+   slower for the build and can't keep the Unix permissions Signal's
+   profile needs.
+3. Docker Desktop forwards the container's 127.0.0.1 ports to Windows, so
+   on that PC the address from `screen.sh url` opens in any browser or in
+   Rambox as is. VNC is at `localhost:5901` after `screen.sh vnc`.
+
+Give WSL enough memory for the build (`.wslconfig`, `memory=8GB` or more,
+if the build is killed).
+
 ## Pieces
 
 - `Dockerfile`: builds Signal Desktop from this repository
