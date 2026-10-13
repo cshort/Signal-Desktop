@@ -1586,6 +1586,12 @@ function openChatMenu(conversationId, anchor, page = null) {
     }
   } else {
     const blocked = c.blocked;
+    if ($('details').hidden) {
+      add('note', c.type === 'group' ? 'Group details' : 'About', () =>
+        openDetails(c.id)
+      );
+      items.push(el('div', 'menu-separator'));
+    }
     if (!blocked && !c.messageRequestPending) {
       if (!c.noteToSelf && c.canChangeTimer) {
         add(
@@ -1727,6 +1733,185 @@ function renderRequestBar() {
   }
   bar.replaceChildren(el('p', 'request-text', text), actions);
   bar.hidden = false;
+}
+
+// --- chat details (Signal's chat details and About pages) ---
+
+let detailsFor = null;
+
+function detailRow(iconName, label, sub) {
+  const row = el('div', 'detail-row');
+  row.append(iconName ? icon(iconName) : el('span', 'icon'));
+  const text = el('div', 'detail-text');
+  text.append(el('div', 'detail-label', label));
+  if (sub) {
+    text.append(el('div', 'detail-sub', sub));
+  }
+  row.append(text);
+  return row;
+}
+
+async function openDetails(conversationId) {
+  const c = conversations.get(conversationId);
+  if (!c) {
+    return;
+  }
+  closePopovers();
+  detailsFor = conversationId;
+  $('details-title').textContent =
+    c.type === 'group'
+      ? 'Group details'
+      : c.noteToSelf
+        ? 'Note to Self'
+        : 'About';
+  const body = $('details-body');
+  body.replaceChildren(el('p', 'setting-note', 'Loading…'));
+  $('details').hidden = false;
+  if (!capabilities.includes('contacts.read')) {
+    renderDetails(c, null);
+    return;
+  }
+  try {
+    const { details } = await api(
+      `api/details?${new URLSearchParams({ conversationId })}`
+    );
+    if (detailsFor === conversationId) {
+      renderDetails(c, details);
+    }
+  } catch (error) {
+    if (detailsFor === conversationId) {
+      body.replaceChildren(
+        el(
+          'p',
+          'setting-note',
+          `Couldn't load details (${error.code ?? error.message}).`
+        )
+      );
+    }
+  }
+}
+
+function renderDetails(c, d) {
+  const body = $('details-body');
+  const head = el('div', 'details-head');
+  head.append(
+    conversationAvatar(c, 80),
+    el('h2', 'details-name', displayTitle(c))
+  );
+  const rows = [];
+  if (!d) {
+    rows.push(
+      el(
+        'p',
+        'setting-note',
+        'Allow this page to see chat details in Signal to show them here.'
+      )
+    );
+  } else if (d.type === 'direct') {
+    if (d.nickname) {
+      rows.push(detailRow('note', d.nickname, 'Nickname'));
+    }
+    if (d.profileName && d.profileName !== displayTitle(c)) {
+      rows.push(detailRow('note', d.profileName, 'Profile name'));
+    }
+    if (d.about) {
+      rows.push(detailRow('edit', d.about));
+    }
+    if (d.verified) {
+      rows.push(detailRow('check', 'Verified'));
+    }
+    if (d.systemContact) {
+      rows.push(detailRow('group', 'In your system contacts'));
+    }
+    if (d.phoneNumber) {
+      rows.push(detailRow('note', d.phoneNumber, 'Phone number'));
+    }
+    if (d.username) {
+      rows.push(detailRow('note', d.username, 'Username'));
+    }
+    if (d.sharedGroups.length > 0) {
+      const names = d.sharedGroups.slice(0, 3).join(', ');
+      const more = d.sharedGroups.length - 3;
+      rows.push(
+        detailRow(
+          'group',
+          more > 0
+            ? `Member of ${names} and ${more} more`
+            : `Member of ${names}`
+        )
+      );
+    } else if (!c.noteToSelf) {
+      rows.push(detailRow('group', 'No groups in common'));
+    }
+    if (d.note) {
+      rows.push(detailRow('note', d.note, 'Note'));
+    }
+  } else {
+    if (d.description) {
+      rows.push(el('p', 'details-description', d.description));
+    }
+    if (d.groupLink) {
+      const link = detailRow('forward', 'Group link', d.groupLink);
+      link.classList.add('clickable');
+      link.title = 'Copy group link';
+      link.addEventListener('click', () => {
+        copyText(d.groupLink);
+      });
+      rows.push(link);
+    }
+    rows.push(
+      el(
+        'div',
+        'setting-heading',
+        `${d.members.length} member${d.members.length === 1 ? '' : 's'}`
+      )
+    );
+    for (const m of d.members) {
+      const row = el('div', 'member-row');
+      const who = m.author ??
+        authorOf(m.conversationId) ?? { title: 'Someone' };
+      const text = el('div', 'detail-text');
+      text.append(el('div', 'detail-label', m.me ? 'You' : who.title));
+      if (who.label?.text) {
+        text.append(el('div', 'detail-sub', who.label.text));
+      }
+      row.append(avatar(m.conversationId, who, 36), text);
+      if (m.admin) {
+        row.append(el('span', 'member-admin', 'Admin'));
+      }
+      rows.push(row);
+    }
+    if (d.pendingCount > 0) {
+      rows.push(
+        el('p', 'setting-note', `${d.pendingCount} invited, not joined yet.`)
+      );
+    }
+    if (d.requestingCount > 0) {
+      rows.push(
+        el(
+          'p',
+          'setting-note',
+          `${d.requestingCount} asking to join through the group link.`
+        )
+      );
+    }
+  }
+  if (!c.noteToSelf || canManageChats()) {
+    const options = el('button', 'setting-button', 'Chat options');
+    options.type = 'button';
+    options.addEventListener('click', ev => {
+      ev.stopPropagation();
+      openChatMenu(c.id, options);
+    });
+    rows.push(el('div', 'details-actions'));
+    rows.at(-1).append(options);
+  }
+  body.replaceChildren(head, ...rows);
+}
+
+function closeDetails() {
+  detailsFor = null;
+  $('details').hidden = true;
 }
 
 function archivedHead() {
@@ -4410,6 +4595,21 @@ $('compose').addEventListener('paste', e => {
 $('settings-open').append(icon('settings'));
 $('settings-open').addEventListener('click', openSettings);
 $('chat-menu-open').append(icon('more'));
+$('details-close').append(icon('close'));
+$('details-close').addEventListener('click', closeDetails);
+$('details').addEventListener('click', e => {
+  if (e.target === $('details')) {
+    closeDetails();
+  }
+});
+// As Signal: the chat header opens the chat's details.
+for (const id of ['chat-avatar', 'chat-title']) {
+  $(id).addEventListener('click', () => {
+    if (selectedId) {
+      openDetails(selectedId);
+    }
+  });
+}
 $('chat-menu-open').addEventListener('click', ev => {
   ev.stopPropagation();
   if (selectedId) {
@@ -4982,6 +5182,7 @@ document.addEventListener('keydown', e => {
       closePollCompose();
       closePollVotes();
       closeSettings();
+      closeDetails();
     }
     collapseSidebar();
   }

@@ -41,6 +41,7 @@ export const CAPABILITIES = [
   'typing.read',
   'typing.send',
   'conversations.manage',
+  'contacts.read',
 ];
 
 // Signal answers at most 16 requests at once per app.

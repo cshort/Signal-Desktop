@@ -49,7 +49,7 @@ Last reviewed: 2026-10-13, against the Signal release in fork main.
 | Payments, gift badges                                    | missing |                                                      |
 | Message details (per-recipient delivery)                 | missing |                                                      |
 | Edit history                                             | missing |                                                      |
-| Chat header: details, members, safety number             | missing |                                                      |
+| Chat header: details, members, safety number             | partial | F16: details and members; safety number missing      |
 | Per-chat settings: timer, mute, block, colors, nickname  | partial | F15: timer, mute, block; colors and nickname missing |
 | Media, files and links gallery                           | missing |                                                      |
 | Search inside a chat                                     | missing |                                                      |

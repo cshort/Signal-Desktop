@@ -70,6 +70,7 @@ export const IMPLEMENTED_CAPABILITIES: ReadonlyArray<CapabilityType> = [
   Capability.TypingRead,
   Capability.TypingSend,
   Capability.ConversationsManage,
+  Capability.ContactsRead,
 ];
 
 export const ErrorCode = {
@@ -148,6 +149,7 @@ export const Method = {
   ProfileSetAvatar: 'profile.setAvatar',
   ConversationsSetTyping: 'conversations.setTyping',
   ConversationsUpdate: 'conversations.update',
+  ConversationsGetDetails: 'conversations.getDetails',
 } as const;
 export type MethodType = (typeof Method)[keyof typeof Method];
 
@@ -186,6 +188,7 @@ export const SERVICE_METHOD_CAPABILITIES = {
   [Method.ProfileSetAvatar]: Capability.SettingsManage,
   [Method.ConversationsSetTyping]: Capability.TypingSend,
   [Method.ConversationsUpdate]: Capability.ConversationsManage,
+  [Method.ConversationsGetDetails]: Capability.ContactsRead,
 } as const satisfies Partial<Record<MethodType, CapabilityType>>;
 export type ServiceMethodType = keyof typeof SERVICE_METHOD_CAPABILITIES;
 
@@ -1044,6 +1047,56 @@ export type ConversationsUpdateParamsType = z.infer<
   typeof conversationsUpdateParamsSchema
 >;
 
+// Fork addition: what Signal's chat details and "About" pages show
+// (decision F16). Needs contacts.read, since it carries phone numbers and
+// usernames, exactly where Signal shows them.
+export const conversationsGetDetailsParamsSchema = z
+  .object({ conversationId: conversationIdSchema })
+  .strict();
+export type ConversationsGetDetailsParamsType = z.infer<
+  typeof conversationsGetDetailsParamsSchema
+>;
+
+export type DetailsMemberDTO = Readonly<{
+  conversationId: string;
+  author: AuthorDTO | null;
+  admin: boolean;
+  me: boolean;
+}>;
+
+export type ConversationDetailsDTO = Readonly<{
+  conversationId: string;
+  type: 'direct' | 'group';
+  title: string;
+  // Direct chats. Null when Signal has nothing to show.
+  profileName: string | null;
+  nickname: string | null;
+  note: string | null;
+  // With its emoji, as Signal writes it.
+  about: string | null;
+  // Formatted, and only when Signal shows it.
+  phoneNumber: string | null;
+  username: string | null;
+  verified: boolean;
+  systemContact: boolean;
+  sharedGroups: ReadonlyArray<string>;
+  // Groups.
+  description: string | null;
+  members: ReadonlyArray<DetailsMemberDTO>;
+  // Invited, and asking to join through the group link.
+  pendingCount: number;
+  requestingCount: number;
+  // Only for admins, as in Signal.
+  groupLink: string | null;
+  areWeAdmin: boolean;
+  canEditGroupInfo: boolean;
+  canAddMembers: boolean;
+}>;
+
+export type ConversationsGetDetailsResultType = Readonly<{
+  details: ConversationDetailsDTO;
+}>;
+
 export type TypistDTO = Readonly<{
   authorConversationId: string;
   author: AuthorDTO | null;
@@ -1120,6 +1173,7 @@ export const SERVICE_PARAM_SCHEMAS = {
   [Method.ProfileSetAvatar]: profileSetAvatarParamsSchema,
   [Method.ConversationsSetTyping]: conversationsSetTypingParamsSchema,
   [Method.ConversationsUpdate]: conversationsUpdateParamsSchema,
+  [Method.ConversationsGetDetails]: conversationsGetDetailsParamsSchema,
 } as const satisfies Record<ServiceMethodType, z.ZodType>;
 
 export type ConversationsListParamsType = z.infer<

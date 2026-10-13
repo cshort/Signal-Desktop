@@ -110,6 +110,8 @@ export class FakeBridge {
   // conversationId -> [{ conversationId, author }]
   members = new Map();
   stickers = { packs: [], recents: [] };
+  // conversationId -> ConversationDetailsDTO
+  details = new Map();
   // messages.list page size; unset returns everything at once.
   pageSize = 0;
   settings = {
@@ -159,6 +161,7 @@ export class FakeBridge {
     'typing.read',
     'typing.send',
     'conversations.manage',
+    'contacts.read',
   ];
   // `${messageId}:${index}` -> { contentType, bytes }
   attachments = new Map();
@@ -453,6 +456,15 @@ export class FakeBridge {
           }),
         });
         return;
+      case 'conversations.getDetails': {
+        const details = this.details.get(params.conversationId);
+        if (!details) {
+          this.#error(session, id, 'NOT_FOUND', undefined);
+          return;
+        }
+        this.#reply(session, id, { details });
+        return;
+      }
       case 'conversations.update':
       case 'conversations.setTyping':
       case 'messages.markRead':

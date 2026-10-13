@@ -548,7 +548,7 @@ describe('externalClient/ExternalClientServer', () => {
       const response = await client.requestAuthorization(
         generateFakeClientKey(),
         await client.hello(),
-        ['contacts.read']
+        ['profile.read']
       );
       assert.strictEqual(response.error?.code, ErrorCode.UnsupportedCapability);
       assert.isEmpty(prompts);

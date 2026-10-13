@@ -4582,6 +4582,10 @@
     "messageformat": "Pin, archive, mute, block, accept and delete chats, and set their disappearing messages timer",
     "description": "Permission shown in the local app access dialog"
   },
+  "icu:ExternalClientCapability__contacts-read": {
+    "messageformat": "See chat details: names, about, phone numbers and usernames where Signal shows them, and group members",
+    "description": "Permission shown in the local app access dialog"
+  },
   "icu:ExternalClientCapability__settings-manage": {
     "messageformat": "See and change your Signal settings, including privacy settings that apply to all your devices",
     "description": "Permission shown in the local app access dialog"

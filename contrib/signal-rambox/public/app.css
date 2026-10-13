@@ -2872,3 +2872,91 @@ label.poll-option {
   padding: 6px 4px 10px;
   font-weight: 600;
 }
+
+/* Signal's chat details: the photo and name, then rows. */
+.details-modal {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.details-body {
+  padding: 0 16px 16px;
+  overflow-y: auto;
+}
+
+.details-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 12px;
+}
+
+.details-name {
+  margin: 0;
+  font-size: 18px;
+  line-height: 24px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.details-description {
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.detail-row,
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.detail-row > .icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+}
+
+.detail-row.clickable {
+  cursor: pointer;
+}
+
+.detail-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.detail-label {
+  overflow-wrap: anywhere;
+}
+
+.detail-sub {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.member-admin {
+  flex: none;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.details-actions {
+  display: flex;
+  justify-content: center;
+  padding-top: 12px;
+}
+
+#chat-avatar,
+#chat-title {
+  cursor: pointer;
+}
+
+/* The chat menu opens over the details dialog. */
+#more-menu {
+  z-index: 32;
+}

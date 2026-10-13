@@ -543,3 +543,23 @@ blocked chats (Accept, Block, Delete / Unblock, Delete) in place of the
 composer. Block, unblock and delete ask first with Signal's own words.
 
 WHY: The second gap on Mike's standing parity rule (2026-10-13).
+
+## F16. Fork only: chat details and members
+
+DECISION: Signal's existing `contacts.read` capability (offered in the
+approval dialog since the proposal, never implemented) is now implemented
+by `conversations.getDetails {conversationId}`. It answers what Signal's
+chat details panel shows: for a person, profile name, nickname and note,
+about, phone number, username, safety-number verified, whether they are in
+your system contacts, and groups in common; for a group, its description,
+members (you first, then by name, with admins marked), pending and
+requesting counts, whether you are an admin and may edit info or add
+members, and the group link (admins only, as in Signal). It reads Signal's
+Redux state, so it is exactly what Signal's own panel would show.
+
+The page opens a details dialog from the chat header (photo or name) and
+from the chat menu ("About" / "Group details"), with a "Chat options"
+button that opens the chat menu over it.
+
+WHY: The third gap on Mike's standing parity rule (2026-10-13). Safety
+numbers and group changes come later.

@@ -40,7 +40,8 @@ can't forward a poll). In a narrow window the chat list shows photos only,
 as Signal's does.
 
 Not here yet (being added on the fork, aiming at everything Signal Desktop
-does): contact cards, typing indicators, voice notes, stories and calls.
+does): contact cards, voice notes, message search, stories and calls.
+The full list is [PARITY.md](PARITY.md).
 
 Photos, member labels, reactions and replies use fork-only bridge additions
 (`conversations.getAvatar`, `messages.react`, `reactions.getPreferred`,
@@ -52,7 +53,8 @@ Photos, member labels, reactions and replies use fork-only bridge additions
 `messages.sendSticker`, `settings.get`, `settings.set`, `profile.get`,
 `profile.set`, `profile.setAvatar` (capability `settings.manage`),
 `conversations.setTyping` and the `typing` topic (`typing.send`,
-`typing.read`), `conversations.update` (`conversations.manage`) and
+`typing.read`), `conversations.update` (`conversations.manage`),
+`conversations.getDetails` (`contacts.read`) and
 `attachmentUploadIds` on
 `messages.sendText`, and pin order, formatting and link previews on the
 DTOs),
