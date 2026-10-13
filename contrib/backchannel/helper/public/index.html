@@ -441,6 +441,7 @@
     </div>
     <div class="lightbox" id="lightbox" hidden>
       <div class="lightbox-bar">
+        <span class="lightbox-count" id="lightbox-count"></span>
         <a
           class="icon-button"
           id="lightbox-save"
@@ -455,8 +456,25 @@
           aria-label="Close"
         ></button>
       </div>
-      <div class="lightbox-stage" id="lightbox-stage"></div>
+      <div class="lightbox-main">
+        <button
+          type="button"
+          class="icon-button lightbox-nav"
+          id="lightbox-prev"
+          title="Previous"
+          aria-label="Previous"
+        ></button>
+        <div class="lightbox-stage" id="lightbox-stage"></div>
+        <button
+          type="button"
+          class="icon-button lightbox-nav"
+          id="lightbox-next"
+          title="Next"
+          aria-label="Next"
+        ></button>
+      </div>
       <div class="lightbox-caption" id="lightbox-caption"></div>
+      <div class="lightbox-strip" id="lightbox-strip" hidden></div>
     </div>
   </body>
 </html>

@@ -37,6 +37,7 @@ Last reviewed: 2026-10-13, against the Signal release in fork main.
 | Quoted replies with thumbnails, jump to the original     | done      | F1, F13, F25                                         |
 | Edit and delete (for me, for everyone)                   | done      | F3                                                   |
 | Photos, videos, GIFs, files, voice notes (play)          | done      | F2                                                   |
+| Viewer: arrows, keys, swipe, thumbnail strip             | partial   | F30: one message; Signal pages the chat              |
 | Long messages                                            | done      |                                                      |
 | Polls (vote, end, create, send to many chats)            | done      | F6                                                   |
 | Stickers (view and send)                                 | done      | F10                                                  |

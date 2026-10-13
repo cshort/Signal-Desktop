@@ -824,3 +824,15 @@ so something running has to hold them; the helper already runs next to
 Signal, and on a server it sends while every other device is off. Keeping
 them in Signal's database would need a new bridge surface for no gain: the
 database key sits on the same disk.
+
+## F30. Fork only: stepping through a message's photos
+
+DECISION: the Backchannel viewer steps through the photos and videos of the
+message it was opened from: on-screen arrows, the Left and Right keys, a
+swipe on touch screens, a "2 of 5" count and a thumbnail strip to jump to
+one. Each keeps its caption and Save button; leaving a video stops it; the
+neighbouring photos load ahead. Page only.
+
+WHY: Mike asked (2026-10-13 14:56 PT). Signal's viewer also pages on
+through the rest of the chat's media; that needs the media gallery, which
+is still missing, so it comes with that.

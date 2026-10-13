@@ -167,6 +167,7 @@ const ICONS = {
   settings:
     'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z',
   back: 'M15 5l-7 7 7 7',
+  next: 'M9 5l7 7-7 7',
   down: 'M12 5v14M5 12l7 7 7-7',
   bell: 'M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0',
   mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3',
@@ -1796,11 +1797,30 @@ function renderSticker(m) {
   return box;
 }
 
-// Full-size view of a message's photos and videos, like Signal's.
+// Full-size view of a message's photos and videos, like Signal's: arrows,
+// arrow keys or a swipe move between them, the strip below jumps to one.
+let lightbox = null;
+
+function lightboxItems(m) {
+  return m.attachments.flatMap((a, index) =>
+    ['image', 'video', 'gif'].includes(kindOf(a)) && a.state === 'ready'
+      ? [index]
+      : []
+  );
+}
+
 function openLightbox(m, index) {
+  const items = lightboxItems(m);
+  lightbox = { m, items, pos: Math.max(0, items.indexOf(index)) };
+  renderLightboxStrip();
+  showLightboxItem();
+  $('lightbox').hidden = false;
+}
+
+function showLightboxItem() {
+  const { m, items, pos } = lightbox;
+  const index = items[pos];
   const a = m.attachments[index];
-  const box = $('lightbox');
-  const stage = $('lightbox-stage');
   let content;
   if (kindOf(a) === 'image') {
     content = el('img');
@@ -1813,16 +1833,80 @@ function openLightbox(m, index) {
     content.playsInline = true;
   }
   content.src = attachmentUrl(m, index, a);
-  stage.replaceChildren(content);
+  // Replacing the stage drops (and so stops) a playing video.
+  $('lightbox-stage').replaceChildren(content);
   $('lightbox-caption').textContent = a.caption ?? '';
   $('lightbox-save').href = attachmentUrl(m, index, a, { download: '1' });
   $('lightbox-save').download = a.fileName ?? 'attachment';
-  box.hidden = false;
+  const several = items.length > 1;
+  $('lightbox-count').textContent = several
+    ? `${pos + 1} of ${items.length}`
+    : '';
+  $('lightbox').classList.toggle('several', several);
+  // Hidden but keeping its place, so the photo stays centred.
+  $('lightbox-prev').classList.toggle('off', pos === 0);
+  $('lightbox-next').classList.toggle('off', pos === items.length - 1);
+  for (const [i, thumb] of [
+    ...$('lightbox-strip').querySelectorAll('button'),
+  ].entries()) {
+    thumb.classList.toggle('current', i === pos);
+    if (i === pos) {
+      thumb.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  }
+  // The neighbours' photos load ahead, so stepping is instant.
+  for (const near of [pos - 1, pos + 1]) {
+    const i = items[near];
+    if (i !== undefined && kindOf(m.attachments[i]) === 'image') {
+      new Image().src = attachmentUrl(m, i, m.attachments[i]);
+    }
+  }
+}
+
+function renderLightboxStrip() {
+  const { m, items } = lightbox;
+  const strip = $('lightbox-strip');
+  strip.hidden = items.length < 2;
+  strip.replaceChildren(
+    ...(items.length < 2 ? [] : items).map((index, pos) => {
+      const a = m.attachments[index];
+      const thumb = el('button', 'lightbox-thumb');
+      thumb.type = 'button';
+      thumb.setAttribute('aria-label', `${pos + 1} of ${items.length}`);
+      if (a.hasThumbnail) {
+        const img = el('img');
+        img.alt = '';
+        img.src = `api/thumbnail?${attachmentParams(m, index, {
+          width: String(previewWidth(56)),
+        })}`;
+        thumb.append(img);
+      }
+      if (kindOf(a) !== 'image') {
+        thumb.append(icon('play'));
+      }
+      thumb.addEventListener('click', () => stepLightbox(pos - lightbox.pos));
+      return thumb;
+    })
+  );
+}
+
+function stepLightbox(delta) {
+  if (!lightbox) {
+    return;
+  }
+  const pos = lightbox.pos + delta;
+  if (pos < 0 || pos >= lightbox.items.length || delta === 0) {
+    return;
+  }
+  lightbox.pos = pos;
+  showLightboxItem();
 }
 
 function closeLightbox() {
+  lightbox = null;
   $('lightbox').hidden = true;
   $('lightbox-stage').replaceChildren();
+  $('lightbox-strip').replaceChildren();
 }
 
 // --- message text: mentions, formatting, links ----------------------------------
@@ -7541,8 +7625,44 @@ $('compose-preview-close').addEventListener('click', dismissLinkPreview);
 $('lightbox-close').append(icon('close'));
 $('lightbox-save').append(icon('download'));
 $('lightbox-close').addEventListener('click', closeLightbox);
+$('lightbox-prev').append(icon('back'));
+$('lightbox-next').append(icon('next'));
+$('lightbox-prev').addEventListener('click', () => stepLightbox(-1));
+$('lightbox-next').addEventListener('click', () => stepLightbox(1));
+document.addEventListener('keydown', e => {
+  if (!lightbox || e.altKey || e.ctrlKey || e.metaKey) {
+    return;
+  }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    e.preventDefault();
+    stepLightbox(e.key === 'ArrowLeft' ? -1 : 1);
+  }
+});
+// A swipe on a touch screen.
+let swipeFrom = null;
+let swiped = false;
+$('lightbox-stage').addEventListener('pointerdown', e => {
+  swipeFrom = e.pointerType === 'mouse' ? null : e.clientX;
+  swiped = false;
+});
+$('lightbox-stage').addEventListener('pointerup', e => {
+  if (swipeFrom !== null && Math.abs(e.clientX - swipeFrom) > 50) {
+    // Not also a tap that closes the viewer.
+    swiped = true;
+    stepLightbox(e.clientX < swipeFrom ? 1 : -1);
+  }
+  swipeFrom = null;
+});
 $('lightbox').addEventListener('click', e => {
-  if (e.target === $('lightbox') || e.target === $('lightbox-stage')) {
+  if (swiped) {
+    swiped = false;
+    return;
+  }
+  if (
+    e.target === $('lightbox') ||
+    e.target === $('lightbox-stage') ||
+    e.target.classList.contains('lightbox-main')
+  ) {
     closeLightbox();
   }
 });
