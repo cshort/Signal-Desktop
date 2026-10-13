@@ -211,6 +211,8 @@ describe('signal-rambox', () => {
       'messages.send',
       'notifications.manage',
       'settings.manage',
+      'typing.read',
+      'typing.send',
     ]);
     assert.equal(req.params.displayName, 'Rambox (signal-rambox)');
   });
@@ -688,6 +690,26 @@ describe('signal-rambox', () => {
     assert.equal(JSON.parse(changed.text).settings.readReceipts, false);
     const call = bridge.calls.findLast(c => c.method === 'settings.set');
     assert.deepEqual(call.params, { key: 'readReceipts', value: false });
+  });
+
+  it('subscribes to typing and passes typing on', async () => {
+    const sub = bridge.calls.findLast(c => c.method === 'events.subscribe');
+    assert.deepEqual(sub.params.topics, [
+      'conversations',
+      'messages',
+      'typing',
+    ]);
+    const res = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/typing`,
+      headers: json,
+      body: { conversationId: 'c1', typing: true, extra: 1 },
+    });
+    assert.equal(res.status, 200);
+    const call = bridge.calls.findLast(
+      c => c.method === 'conversations.setTyping'
+    );
+    assert.deepEqual(call.params, { conversationId: 'c1', typing: true });
   });
 
   it('reads and saves the profile, and changes its photo', async () => {

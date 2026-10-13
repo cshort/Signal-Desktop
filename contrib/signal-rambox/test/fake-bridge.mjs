@@ -153,6 +153,8 @@ export class FakeBridge {
     'attachments.read',
     'notifications.manage',
     'settings.manage',
+    'typing.read',
+    'typing.send',
   ];
   // `${messageId}:${index}` -> { contentType, bytes }
   attachments = new Map();
@@ -447,6 +449,7 @@ export class FakeBridge {
           }),
         });
         return;
+      case 'conversations.setTyping':
       case 'messages.markRead':
       case 'messages.react':
       case 'messages.edit':

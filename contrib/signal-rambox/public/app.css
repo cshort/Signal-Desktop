@@ -2746,3 +2746,62 @@ label.poll-option {
     box-shadow: 0 0 0 3px transparent;
   }
 }
+
+/* Signal's typing indicator: three dots that pulse in turn. */
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 1.2em;
+}
+
+.typing-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: typing-dot 1.4s infinite ease-in-out;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+.typing {
+  padding: 2px 0 8px;
+}
+
+.typing-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.typing-avatars {
+  display: flex;
+}
+
+.typing-avatars .avatar + .avatar {
+  margin-left: -10px;
+}
+
+.typing-bubble {
+  padding: 10px 14px;
+}

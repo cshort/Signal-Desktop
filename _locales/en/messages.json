@@ -4570,6 +4570,14 @@
     "messageformat": "Show message notifications instead of Signal while it is connected",
     "description": "Permission shown in the local app access dialog"
   },
+  "icu:ExternalClientCapability__typing-read": {
+    "messageformat": "See when people are typing to you",
+    "description": "Permission shown in the local app access dialog"
+  },
+  "icu:ExternalClientCapability__typing-send": {
+    "messageformat": "Show others when you are typing, following your typing indicators setting",
+    "description": "Permission shown in the local app access dialog"
+  },
   "icu:ExternalClientCapability__settings-manage": {
     "messageformat": "See and change your Signal settings, including privacy settings that apply to all your devices",
     "description": "Permission shown in the local app access dialog"

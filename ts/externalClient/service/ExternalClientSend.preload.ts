@@ -21,6 +21,7 @@ import type { ServiceResultType } from '../hostTypes.std.ts';
 import { toMessageDTO } from '../messageDto.std.ts';
 import { toBodyRanges } from './ExternalClientMentions.preload.ts';
 import type {
+  ConversationsSetTypingParamsType,
   MessagesMarkReadParamsType,
   MessagesSendTextParamsType,
   MessagesSendTextResultType,
@@ -232,5 +233,25 @@ export async function markRead({
     { received_at: message.received_at, sent_at: message.sent_at },
     { sendReadReceipts: true }
   );
+  return { ok: true, value: {} };
+}
+
+// Fork addition: typing indicators from an external client's composer, sent
+// the way Signal's own composer sends them (decision F14).
+export function setTyping({
+  conversationId,
+  typing,
+}: ConversationsSetTypingParamsType): ServiceResultType {
+  const model = getListedConversation(conversationId);
+  if (!model) {
+    return { ok: false, code: ErrorCode.NotFound };
+  }
+  if (typing) {
+    // Throttled; refreshes while typing continues and pauses after three
+    // seconds, all inside Signal, and only when the setting is on.
+    model.throttledBumpTyping?.();
+  } else if (model.typingPauseTimer || model.typingRefreshTimer) {
+    model.onTypingPauseTimeout();
+  }
   return { ok: true, value: {} };
 }

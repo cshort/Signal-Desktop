@@ -265,6 +265,112 @@ function diffConversations(): void {
   }
 }
 
+// Typing (fork addition): who is typing where, from the same Redux state
+// Signal's timeline reads (typingContactIdTimestamps). Signal clears an
+// entry when its typing timer runs out, so stops arrive on their own.
+
+// conversationId -> typist conversation ids, sorted and joined.
+let typingSeen = new Map<string, string>();
+let unsubscribeTyping: (() => void) | undefined;
+let typingTimer: NodeJS.Timeout | undefined;
+
+function currentTyping(): Map<string, Array<string>> {
+  const result = new Map<string, Array<string>>();
+  const lookup = getLookup();
+  if (!lookup) {
+    return result;
+  }
+  for (const conversation of Object.values(lookup)) {
+    const typists = Object.keys(conversation.typingContactIdTimestamps ?? {});
+    if (typists.length > 0) {
+      result.set(conversation.id, typists.sort());
+    }
+  }
+  return result;
+}
+
+function diffTyping(): void {
+  typingTimer = undefined;
+  if (!topics.has(EventTopic.Typing)) {
+    return;
+  }
+  const now = currentTyping();
+  const changed = new Set<string>();
+  for (const [conversationId, typists] of now) {
+    if (typingSeen.get(conversationId) !== typists.join(',')) {
+      changed.add(conversationId);
+    }
+  }
+  for (const conversationId of typingSeen.keys()) {
+    if (!now.has(conversationId)) {
+      changed.add(conversationId);
+    }
+  }
+  typingSeen = new Map(
+    [...now].map(([conversationId, typists]) => [
+      conversationId,
+      typists.join(','),
+    ])
+  );
+  if (changed.size === 0) {
+    return;
+  }
+  const context = getDtoContext();
+  for (const conversationId of changed) {
+    if (!getListedConversation(conversationId)) {
+      continue;
+    }
+    const typists = (now.get(conversationId) ?? []).map(
+      authorConversationId => ({
+        authorConversationId,
+        author: context.getAuthor(
+          authorConversationId,
+          conversationId,
+          window.ConversationController.get(
+            authorConversationId
+          )?.getServiceId()
+        ),
+      })
+    );
+    enqueue(`t:${conversationId}`, EventName.TypingChanged, {
+      kind: 'data',
+      data: { conversationId, typists },
+    });
+  }
+}
+
+function startTyping(): void {
+  if (unsubscribeTyping) {
+    return;
+  }
+  if (!getLookup()) {
+    // Redux is created later in startup than this service.
+    typingTimer = setTimeout(() => {
+      typingTimer = undefined;
+      if (topics.has(EventTopic.Typing)) {
+        startTyping();
+      }
+    }, STORE_WAIT_MS);
+    return;
+  }
+  // Whoever is typing now goes out first.
+  typingSeen = new Map();
+  diffTyping();
+  unsubscribeTyping = window.reduxStore.subscribe(() => {
+    if (!typingTimer) {
+      typingTimer = setTimeout(diffTyping, FLUSH_DELAY_MS);
+    }
+  });
+}
+
+function stopTyping(): void {
+  unsubscribeTyping?.();
+  unsubscribeTyping = undefined;
+  clearTimeout(typingTimer);
+  typingTimer = undefined;
+  typingSeen = new Map();
+}
+
 function setTopics(next: ReadonlySet<EventTopicType>): void {
   topics = next;
 
@@ -282,6 +388,12 @@ function setTopics(next: ReadonlySet<EventTopicType>): void {
     startConversations();
   } else {
     stopConversations();
+  }
+
+  if (topics.has(EventTopic.Typing)) {
+    startTyping();
+  } else {
+    stopTyping();
   }
 
   if (topics.size === 0) {

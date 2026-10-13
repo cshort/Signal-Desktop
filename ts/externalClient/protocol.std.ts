@@ -64,6 +64,8 @@ export const IMPLEMENTED_CAPABILITIES: ReadonlyArray<CapabilityType> = [
   Capability.AttachmentsRead,
   Capability.NotificationsManage,
   Capability.SettingsManage,
+  Capability.TypingRead,
+  Capability.TypingSend,
 ];
 
 export const ErrorCode = {
@@ -140,6 +142,7 @@ export const Method = {
   ProfileGet: 'profile.get',
   ProfileSet: 'profile.set',
   ProfileSetAvatar: 'profile.setAvatar',
+  ConversationsSetTyping: 'conversations.setTyping',
 } as const;
 export type MethodType = (typeof Method)[keyof typeof Method];
 
@@ -176,6 +179,7 @@ export const SERVICE_METHOD_CAPABILITIES = {
   [Method.ProfileGet]: Capability.SettingsManage,
   [Method.ProfileSet]: Capability.SettingsManage,
   [Method.ProfileSetAvatar]: Capability.SettingsManage,
+  [Method.ConversationsSetTyping]: Capability.TypingSend,
 } as const satisfies Partial<Record<MethodType, CapabilityType>>;
 export type ServiceMethodType = keyof typeof SERVICE_METHOD_CAPABILITIES;
 
@@ -188,6 +192,8 @@ export function isServiceMethod(method: string): method is ServiceMethodType {
 export const EventTopic = {
   Conversations: 'conversations',
   Messages: 'messages',
+  // Fork addition: who is typing (typing.changed).
+  Typing: 'typing',
 } as const;
 export type EventTopicType = (typeof EventTopic)[keyof typeof EventTopic];
 export const ALL_EVENT_TOPICS: ReadonlyArray<EventTopicType> =
@@ -196,6 +202,7 @@ export const ALL_EVENT_TOPICS: ReadonlyArray<EventTopicType> =
 export const EVENT_TOPIC_CAPABILITIES = {
   [EventTopic.Conversations]: Capability.ConversationsRead,
   [EventTopic.Messages]: Capability.MessagesRead,
+  [EventTopic.Typing]: Capability.TypingRead,
 } as const satisfies Record<EventTopicType, CapabilityType>;
 
 export const EventName = {
@@ -210,6 +217,9 @@ export const EventName = {
   MessageUpdated: 'message.updated',
   // data: { messageId, conversationId }
   MessageRemoved: 'message.removed',
+  // data: TypingChangedDTO. Fork addition: sent when the people typing in a
+  // listed conversation change; an empty list means nobody is.
+  TypingChanged: 'typing.changed',
   // data: {}. Signal stopped delivering events to this session, which is
   // now unsubscribed from every topic. Subscribe again and take a new
   // snapshot.
@@ -224,6 +234,7 @@ export const EVENT_TOPICS = {
   [EventName.MessageAdded]: EventTopic.Messages,
   [EventName.MessageUpdated]: EventTopic.Messages,
   [EventName.MessageRemoved]: EventTopic.Messages,
+  [EventName.TypingChanged]: EventTopic.Typing,
 } as const satisfies Partial<Record<EventNameType, EventTopicType>>;
 export type BroadcastEventNameType = keyof typeof EVENT_TOPICS;
 
@@ -971,6 +982,30 @@ export type ProfileDTO = Readonly<{
 
 export type ProfileGetResultType = Readonly<{ profile: ProfileDTO }>;
 
+// Fork addition: typing indicators, as Signal's composer sends them. `true`
+// while the user types (Signal throttles, refreshes and pauses it, and
+// sends nothing when the typing indicators setting is off); `false` when
+// the draft is cleared.
+export const conversationsSetTypingParamsSchema = z
+  .object({
+    conversationId: conversationIdSchema,
+    typing: z.boolean(),
+  })
+  .strict();
+export type ConversationsSetTypingParamsType = z.infer<
+  typeof conversationsSetTypingParamsSchema
+>;
+
+export type TypistDTO = Readonly<{
+  authorConversationId: string;
+  author: AuthorDTO | null;
+}>;
+
+export type TypingChangedDTO = Readonly<{
+  conversationId: string;
+  typists: ReadonlyArray<TypistDTO>;
+}>;
+
 export const notificationsSetHandledParamsSchema = z
   .object({
     handled: z.boolean(),
@@ -1035,6 +1070,7 @@ export const SERVICE_PARAM_SCHEMAS = {
   [Method.ProfileGet]: profileGetParamsSchema,
   [Method.ProfileSet]: profileSetParamsSchema,
   [Method.ProfileSetAvatar]: profileSetAvatarParamsSchema,
+  [Method.ConversationsSetTyping]: conversationsSetTypingParamsSchema,
 } as const satisfies Record<ServiceMethodType, z.ZodType>;
 
 export type ConversationsListParamsType = z.infer<

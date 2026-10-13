@@ -51,7 +51,7 @@ import {
   getStickerPacks,
   sendSticker,
 } from './ExternalClientStickers.preload.ts';
-import { markRead, sendText } from './ExternalClientSend.preload.ts';
+import { markRead, sendText, setTyping } from './ExternalClientSend.preload.ts';
 import {
   getDtoContext,
   getListedConversation,
@@ -379,6 +379,13 @@ async function dispatch(
       }
       const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
       return params.success ? sendSticker(params.data) : invalid;
+    }
+    case Method.ConversationsSetTyping: {
+      if (!window.ConversationController.isInitialFetchComplete()) {
+        return notReady;
+      }
+      const params = safeParseUnknown(SERVICE_PARAM_SCHEMAS[method], rawParams);
+      return params.success ? setTyping(params.data) : invalid;
     }
     case Method.ProfileGet: {
       if (!window.ConversationController.isInitialFetchComplete()) {

@@ -38,6 +38,8 @@ export const CAPABILITIES = [
   'messages.react',
   'attachments.read',
   'settings.manage',
+  'typing.read',
+  'typing.send',
 ];
 
 // Signal answers at most 16 requests at once per app.
@@ -424,12 +426,17 @@ export class Bridge {
     }
     this.#log(`authorized: ${granted.capabilities.join(', ')}`);
 
-    await this.call('events.subscribe', {
-      topics: ['conversations', 'messages'],
-    });
+    await this.call('events.subscribe', { topics: this.#topics() });
     this.#setState(BridgeState.Ready);
     await this.onReady?.();
     await this.#syncNotifications();
+  }
+
+  // Typing comes only with its permission (older grants lack it).
+  #topics() {
+    return this.#capabilities.includes('typing.read')
+      ? ['conversations', 'messages', 'typing']
+      : ['conversations', 'messages'];
   }
 
   async #handleEvent(msg) {
@@ -438,9 +445,7 @@ export class Bridge {
       // again and let the app take a fresh snapshot.
       this.#notificationsHeld = false;
       try {
-        await this.call('events.subscribe', {
-          topics: ['conversations', 'messages'],
-        });
+        await this.call('events.subscribe', { topics: this.#topics() });
         await this.onReady?.();
         await this.#syncNotifications();
       } catch (error) {

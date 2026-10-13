@@ -42,7 +42,7 @@ Last reviewed: 2026-10-13, against the Signal release in fork main.
 | Stickers (view and send)                                 | done    | F10                                            |
 | Link previews (view)                                     | done    |                                                |
 | Mark read as you read, clears "mark as unread"           | done    | F13                                            |
-| Typing indicators (see them)                             | missing |                                                |
+| Typing indicators (see them)                             | done    | F14                                            |
 | Disappearing messages (expire on time)                   | done    |                                                |
 | View-once media                                          | missing |                                                |
 | Contact cards (view)                                     | missing |                                                |
@@ -72,7 +72,7 @@ Last reviewed: 2026-10-13, against the Signal release in fork main.
 | Record voice notes                              | missing   |                      |
 | Send contact cards                              | missing   |                      |
 | GIF search                                      | missing   |                      |
-| Typing indicators (send them)                   | missing   |                      |
+| Typing indicators (send them)                   | done      | F14                  |
 | Send view-once media                            | missing   |                      |
 | Sent media quality per message                  | missing   | the setting applies  |
 

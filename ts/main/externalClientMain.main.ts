@@ -428,6 +428,10 @@ function getCapabilityLabel(
       return i18n('icu:ExternalClientCapability__notifications-manage');
     case Capability.SettingsManage:
       return i18n('icu:ExternalClientCapability__settings-manage');
+    case Capability.TypingRead:
+      return i18n('icu:ExternalClientCapability__typing-read');
+    case Capability.TypingSend:
+      return i18n('icu:ExternalClientCapability__typing-send');
     default:
       // Only implemented capabilities can be requested; see protocol.std.ts.
       return capability;

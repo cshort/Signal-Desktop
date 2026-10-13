@@ -14,6 +14,8 @@ const conversations = new Map();
 // listed conversation of their own).
 const authors = new Map();
 let capabilities = [];
+// conversationId -> [{ authorConversationId, author }], from typing.changed.
+const typingIn = new Map();
 let selectedId = null;
 let messages = new Map();
 let nextCursor = null;
@@ -379,6 +381,7 @@ function conversationRow(c) {
     c.id === selectedId,
     shortTime(c.lastActivityAt),
     c.lastMessage,
+    typingIn.has(c.id),
   ]);
   const cached = rowCache.get(c.id);
   if (cached && cached.key === key) {
@@ -397,8 +400,13 @@ function conversationRow(c) {
     el('span', 'time', shortTime(c.lastActivityAt))
   );
   const bottom = el('span', 'row-bottom');
-  bottom.append(el('span', 'preview', previewLine(c)));
-  if (c.lastMessage?.status) {
+  if (typingIn.has(c.id)) {
+    // As Signal's list: the dots take the preview's place.
+    bottom.append(typingDots());
+  } else {
+    bottom.append(el('span', 'preview', previewLine(c)));
+  }
+  if (c.lastMessage?.status && !typingIn.has(c.id)) {
     bottom.append(statusIcon(c.lastMessage.status));
   }
   text.append(top, bottom);
@@ -1438,6 +1446,7 @@ async function selectConversation(id) {
   } catch (error) {
     showError(`Couldn't load messages (${error.code ?? error.message}).`);
   }
+  renderTyping();
   focusCompose();
   maybeMarkRead();
 }
@@ -2928,6 +2937,7 @@ function connectEvents() {
   on('state', ({ state }) => {
     bridgeState = state;
     if (state !== 'ready') {
+      typingIn.clear();
       conversations.clear();
       renderConversations();
       renderTitle();
@@ -2941,6 +2951,22 @@ function connectEvents() {
     if (c.id === selectedId) {
       renderChatHeader();
       maybeMarkRead();
+    }
+  });
+  on('typing.changed', ({ conversationId, typists }) => {
+    for (const t of typists) {
+      if (t.author) {
+        authors.set(t.authorConversationId, t.author);
+      }
+    }
+    if (typists.length > 0) {
+      typingIn.set(conversationId, typists);
+    } else {
+      typingIn.delete(conversationId);
+    }
+    renderConversations();
+    if (conversationId === selectedId) {
+      renderTyping();
     }
   });
   on('conversation.removed', ({ conversationId }) => {
@@ -3464,11 +3490,91 @@ function focusCompose({ end = false } = {}) {
 }
 
 // Keeps the empty box truly empty, so the placeholder shows.
+// Signal's typing dots.
+function typingDots() {
+  const dots = el('span', 'typing-dots');
+  dots.setAttribute('role', 'img');
+  dots.setAttribute('aria-label', 'Typing');
+  dots.append(el('span'), el('span'), el('span'));
+  return dots;
+}
+
+// As Signal's timeline: a bubble with the dots under the last message, with
+// the typists' photos in groups.
+function renderTyping() {
+  const box = $('typing');
+  const typists = typingIn.get(selectedId) ?? [];
+  if (typists.length === 0) {
+    box.hidden = true;
+    box.replaceChildren();
+    return;
+  }
+  const messagesBox = $('messages');
+  const atBottom =
+    messagesBox.scrollHeight -
+      messagesBox.scrollTop -
+      messagesBox.clientHeight <
+    80;
+  const conversation = conversations.get(selectedId);
+  const row = el('div', 'typing-row');
+  if (conversation?.type === 'group') {
+    const faces = el('span', 'typing-avatars');
+    for (const t of typists.slice(0, 3)) {
+      faces.append(
+        avatar(
+          t.authorConversationId,
+          t.author ?? authorOf(t.authorConversationId) ?? { title: '' },
+          28
+        )
+      );
+    }
+    row.append(faces);
+  }
+  const bubble = el('span', 'bubble typing-bubble');
+  bubble.append(typingDots());
+  row.append(bubble);
+  const names = typists
+    .map(t => (t.author ?? authorOf(t.authorConversationId))?.title)
+    .filter(Boolean);
+  row.title = names.length ? `${names.join(', ')} typing` : 'Typing';
+  box.replaceChildren(row);
+  box.hidden = false;
+  if (atBottom) {
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+  }
+}
+
+// Tells Signal we're typing, at most once a second; Signal itself refreshes,
+// pauses after three seconds and honors the typing indicators setting.
+let typingSentAt = 0;
+let typingFor = null;
+
+function sendTyping(typing) {
+  if (!capabilities.includes('typing.send') || !selectedId) {
+    return;
+  }
+  const now = Date.now();
+  if (typing) {
+    if (typingFor === selectedId && now - typingSentAt < 1000) {
+      return;
+    }
+    typingSentAt = now;
+    typingFor = selectedId;
+  } else {
+    if (typingFor !== selectedId) {
+      return;
+    }
+    typingFor = null;
+  }
+  api('api/typing', { conversationId: selectedId, typing }).catch(() => {});
+}
+
 function onComposeInput() {
   const box = composeBox();
   if (box.childNodes.length > 0 && readCompose().length === 0) {
     box.replaceChildren();
   }
+  sendTyping(box.childNodes.length > 0);
   updateMentionPicker();
   updateFormatBar();
 }

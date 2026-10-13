@@ -503,3 +503,23 @@ it isn't there, the page says "Original message not found", as Signal.
 WHY: Mike (2026-10-12 18:20 PT): some chats stayed unread after reading
 them, and Signal's quote jump was missing.
 
+## F14. Fork only: typing indicators
+
+DECISION: The vocabulary's `typing.read` and `typing.send` capabilities are
+now implemented (two more lines in Signal's approval dialog).
+
+- Topic `typing` (needs `typing.read`) sends `typing.changed {conversationId,
+  typists: [{authorConversationId, author}]}` whenever the people typing in
+  a listed chat change, read from the same Redux state Signal's timeline
+  uses; an empty list means nobody is. Whoever is typing at subscribe time
+  is sent first.
+- `conversations.setTyping {conversationId, typing}` (needs `typing.send`)
+  calls Signal's own throttledBumpTyping, so Signal refreshes, pauses after
+  three seconds and sends nothing while the typing indicators setting is
+  off; `false` stops at once (the draft was cleared).
+- The page shows Signal's dots in the chat list and a typing bubble (with
+  the typists' photos in groups) under the last message, and reports typing
+  at most once a second while the draft is non-empty.
+
+WHY: The first gap on Mike's standing parity rule (2026-10-13).
+

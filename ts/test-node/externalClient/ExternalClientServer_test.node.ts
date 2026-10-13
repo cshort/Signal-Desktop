@@ -548,7 +548,7 @@ describe('externalClient/ExternalClientServer', () => {
       const response = await client.requestAuthorization(
         generateFakeClientKey(),
         await client.hello(),
-        ['typing.send']
+        ['contacts.read']
       );
       assert.strictEqual(response.error?.code, ErrorCode.UnsupportedCapability);
       assert.isEmpty(prompts);
@@ -762,9 +762,18 @@ describe('externalClient/ExternalClientServer', () => {
       await startServer();
       const { client } = await approvedClient();
       const response = await client.request('events.subscribe', {
-        topics: ['typing'],
+        topics: ['calls'],
       });
       assert.strictEqual(response.error?.code, ErrorCode.InvalidArgument);
+    });
+
+    it('needs typing.read for the typing topic', async () => {
+      await startServer();
+      const { client } = await approvedClient();
+      const response = await client.request('events.subscribe', {
+        topics: ['typing'],
+      });
+      assert.strictEqual(response.error?.code, ErrorCode.PermissionDenied);
     });
 
     it('delivers events only for subscribed topics, in order', async () => {
