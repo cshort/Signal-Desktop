@@ -12,6 +12,7 @@ import {
   PROTOCOL_NAME,
   attachmentsUploadBeginParamsSchema,
   attachmentsUploadChunkParamsSchema,
+  groupsUpdateParamsSchema,
   helloParamsSchema,
   messagesEditParamsSchema,
   messagesForwardParamsSchema,
@@ -426,6 +427,34 @@ describe('externalClient/protocol', () => {
             { length: MAX_FORMATTING_RANGES + 1 },
             () => range
           ),
+        })
+      );
+    });
+    it("takes Signal's group changes only", () => {
+      const update = (change: unknown) =>
+        accepts(groupsUpdateParamsSchema, { conversationId, change });
+      assert.isTrue(update({ action: 'setInfo', name: 'Books' }));
+      assert.isTrue(update({ action: 'setInfo', avatar: null }));
+      assert.isTrue(update({ action: 'setInfo', description: '' }));
+      assert.isFalse(update({ action: 'setInfo', name: '' }));
+      assert.isTrue(
+        update({ action: 'addMembers', memberIds: [conversationId] })
+      );
+      assert.isFalse(update({ action: 'addMembers', memberIds: [] }));
+      assert.isTrue(
+        update({ action: 'setAdmin', memberId: conversationId, admin: true })
+      );
+      assert.isFalse(update({ action: 'setAdmin', memberId: conversationId }));
+      assert.isTrue(update({ action: 'groupLink', enabled: false }));
+      assert.isTrue(update({ action: 'permissions', sendMessages: 'admins' }));
+      assert.isFalse(update({ action: 'permissions', addMembers: 'nobody' }));
+      assert.isTrue(update({ action: 'leave' }));
+      assert.isFalse(update({ action: 'ban', memberId: conversationId }));
+      assert.isFalse(
+        accepts(groupsUpdateParamsSchema, {
+          conversationId,
+          change: { action: 'leave' },
+          extra: 1,
         })
       );
     });

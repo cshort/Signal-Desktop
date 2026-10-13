@@ -1,6 +1,7 @@
 // Copyright 2026 Signal Messenger, LLC
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { SignalService as Proto } from '../../protobuf/index.std.ts';
 import { getSharedGroupNames } from '../../util/sharedGroupNames.dom.ts';
 import type { ServiceResultType } from '../hostTypes.std.ts';
 import type {
@@ -8,6 +9,8 @@ import type {
   ConversationsGetDetailsParamsType,
   ConversationsGetDetailsResultType,
   DetailsMemberDTO,
+  GroupInviteDTO,
+  GroupRequestDTO,
 } from '../protocol.std.ts';
 import { ErrorCode } from '../protocol.std.ts';
 import {
@@ -18,6 +21,12 @@ import {
 // Fork addition: Signal's chat details and "About" pages for external
 // clients (decision F16). Fields are copied one by one from the same view
 // model those pages read, and only where they show them.
+
+const AccessRequired = Proto.AccessControl.AccessRequired;
+
+function access(value: number | undefined): 'all' | 'admins' {
+  return value === AccessRequired.ADMINISTRATOR ? 'admins' : 'all';
+}
 
 function text(value: string | undefined | null): string | null {
   const trimmed = value?.trim();
@@ -41,8 +50,48 @@ export function getDetails({
     window.ConversationController.getOurConversationId();
 
   const members: Array<DetailsMemberDTO> = [];
+  const invites: Array<GroupInviteDTO> = [];
+  const requests: Array<GroupRequestDTO> = [];
+  const areWeAdmin = Boolean(conversation.areWeAdmin);
   if (isGroup) {
     const context = getDtoContext();
+    const ourAci =
+      window.ConversationController.get(ourConversationId)?.attributes
+        .serviceId;
+    // As Signal's "Requests and invites" page: invitees you invited by
+    // name; others' invitees only as a count per inviter.
+    for (const pending of conversation.pendingMemberships ?? []) {
+      const member = window.ConversationController.get(pending.serviceId);
+      if (!member) {
+        continue;
+      }
+      const inviter = pending.addedByUserId
+        ? window.ConversationController.get(pending.addedByUserId)
+        : undefined;
+      const invitedByMe =
+        ourAci !== undefined && pending.addedByUserId === ourAci;
+      invites.push({
+        conversationId: member.id,
+        author: invitedByMe
+          ? context.getAuthor(member.id, conversationId, pending.serviceId)
+          : null,
+        invitedBy: inviter
+          ? context.getAuthor(inviter.id, conversationId, pending.addedByUserId)
+          : null,
+        invitedByMe,
+      });
+    }
+    if (areWeAdmin) {
+      for (const pending of conversation.pendingApprovalMemberships ?? []) {
+        const member = window.ConversationController.get(pending.aci);
+        if (member) {
+          requests.push({
+            conversationId: member.id,
+            author: context.getAuthor(member.id, conversationId, pending.aci),
+          });
+        }
+      }
+    }
     for (const membership of conversation.memberships ?? []) {
       const member = window.ConversationController.get(membership.aci);
       if (!member) {
@@ -62,6 +111,17 @@ export function getDetails({
         (a.author?.title ?? '').localeCompare(b.author?.title ?? '')
     );
   }
+
+  const otherMembers = members.filter(member => !member.me);
+  const canLeave =
+    !areWeAdmin ||
+    otherMembers.length === 0 ||
+    otherMembers.some(member => member.admin);
+  const groupLinkEnabled =
+    isGroup &&
+    conversation.accessControlAddFromInviteLink !== undefined &&
+    conversation.accessControlAddFromInviteLink !==
+      AccessRequired.UNSATISFIABLE;
 
   const nickname = [
     conversation.nicknameGivenName,
@@ -98,10 +158,27 @@ export function getDetails({
     pendingCount: conversation.pendingMemberships?.length ?? 0,
     requestingCount: conversation.pendingApprovalMemberships?.length ?? 0,
     groupLink:
-      isGroup && conversation.areWeAdmin ? text(conversation.groupLink) : null,
-    areWeAdmin: Boolean(conversation.areWeAdmin),
+      areWeAdmin && groupLinkEnabled ? text(conversation.groupLink) : null,
+    areWeAdmin,
     canEditGroupInfo: Boolean(conversation.canEditGroupInfo),
     canAddMembers: Boolean(conversation.canAddNewMembers),
+    invites,
+    requests,
+    groupLinkEnabled,
+    groupLinkApproval:
+      groupLinkEnabled &&
+      conversation.accessControlAddFromInviteLink ===
+        AccessRequired.ADMINISTRATOR,
+    addMembersAccess: access(conversation.accessControlMembers),
+    editInfoAccess: access(conversation.accessControlAttributes),
+    sendMessagesAccess: conversation.announcementsOnly ? 'admins' : 'all',
+    canAnnounce:
+      isGroup &&
+      areWeAdmin &&
+      Boolean(
+        conversation.announcementsOnly || conversation.announcementsOnlyReady
+      ),
+    canLeave: isGroup && canLeave,
   };
   const value: ConversationsGetDetailsResultType = { details };
   return { ok: true, value };

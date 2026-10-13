@@ -140,7 +140,8 @@ export function checkRequest(req, { origins, token }) {
     const upload =
       path.endsWith('/api/upload') ||
       path.endsWith('/api/profilePhoto') ||
-      path.endsWith('/api/groups');
+      path.endsWith('/api/groups') ||
+      path.endsWith('/api/groupInfo');
     if (type !== (upload ? 'application/octet-stream' : 'application/json')) {
       return [415, 'wrong content type'];
     }
@@ -648,6 +649,49 @@ export function createWebServer({
         ...(bytes.length > 0 ? { avatar: bytes.toString('base64') } : {}),
       });
       sendJson(res, 200, result);
+      return;
+    }
+    // Signal's group details page: one group change.
+    if (req.method === 'POST' && route === 'api/group') {
+      const { conversationId, change } = await readJson(req);
+      sendJson(
+        res,
+        200,
+        await bridge.call('groups.update', { conversationId, change })
+      );
+      return;
+    }
+    if (req.method === 'POST' && route === 'api/groupInfo') {
+      // Name, description and photo in the query; the body is the new
+      // photo when `photo` is 'set'. 'remove' removes it.
+      let info;
+      try {
+        info = JSON.parse(url.searchParams.get('info') ?? '');
+      } catch {
+        info = null;
+      }
+      const bytes = await readBytes(req, MAX_PROFILE_PHOTO_BYTES);
+      if (!info || typeof info !== 'object' || !bytes) {
+        sendJson(res, 400, { error: { code: 'INVALID_ARGUMENT' } });
+        return;
+      }
+      const { conversationId, name, description, photo } = info;
+      if (photo === 'set' && bytes.length === 0) {
+        sendJson(res, 400, { error: { code: 'INVALID_ARGUMENT' } });
+        return;
+      }
+      const change = {
+        action: 'setInfo',
+        ...(name != null ? { name } : {}),
+        ...(description != null ? { description } : {}),
+        ...(photo === 'set' ? { avatar: bytes.toString('base64') } : {}),
+        ...(photo === 'remove' ? { avatar: null } : {}),
+      };
+      sendJson(
+        res,
+        200,
+        await bridge.call('groups.update', { conversationId, change })
+      );
       return;
     }
     if (req.method === 'POST' && route === 'api/profilePhoto') {

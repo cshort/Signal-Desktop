@@ -2947,8 +2947,74 @@ label.poll-option {
 
 .details-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
+  gap: 8px;
   padding-top: 12px;
+}
+
+/* Group management (F21). */
+.member-row.clickable {
+  cursor: pointer;
+}
+
+.member-row.clickable:hover {
+  background: var(--hover);
+}
+
+.setting-button.small {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.group-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.group-edit textarea {
+  resize: vertical;
+}
+
+.group-edit .details-actions .sub {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.group-edit-photo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.group-photo-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  overflow: hidden;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--hover);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.group-photo-button img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.group-photo-button .icon {
+  width: 36px;
+  height: 36px;
 }
 
 #chat-avatar,

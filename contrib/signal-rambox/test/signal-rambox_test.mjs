@@ -208,6 +208,7 @@ describe('signal-rambox', () => {
       'conversations.create',
       'conversations.manage',
       'conversations.read',
+      'groups.manage',
       'messages.markRead',
       'messages.react',
       'messages.read',
@@ -765,6 +766,63 @@ describe('signal-rambox', () => {
     assert.equal(res.status, 200);
     call = bridge.calls.findLast(c => c.method === 'groups.create');
     assert.deepEqual(call.params, { name: 'Book club', memberIds: ['k1'] });
+  });
+
+  it('changes groups', async () => {
+    let res = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/group`,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conversationId: 'g1',
+        change: { action: 'setAdmin', memberId: 'k1', admin: true },
+        extra: 1,
+      }),
+    });
+    assert.equal(res.status, 200);
+    let call = bridge.calls.findLast(c => c.method === 'groups.update');
+    assert.deepEqual(call.params, {
+      conversationId: 'g1',
+      change: { action: 'setAdmin', memberId: 'k1', admin: true },
+    });
+
+    const info = { conversationId: 'g1', name: 'Books', photo: 'set' };
+    res = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/groupInfo?info=${encodeURIComponent(
+        JSON.stringify(info)
+      )}`,
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: Buffer.from([1, 2, 3]),
+    });
+    assert.equal(res.status, 200);
+    call = bridge.calls.findLast(c => c.method === 'groups.update');
+    assert.deepEqual(call.params, {
+      conversationId: 'g1',
+      change: { action: 'setInfo', name: 'Books', avatar: 'AQID' },
+    });
+
+    res = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/groupInfo?info=${encodeURIComponent(
+        JSON.stringify({ conversationId: 'g1', photo: 'remove' })
+      )}`,
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: Buffer.alloc(0),
+    });
+    call = bridge.calls.findLast(c => c.method === 'groups.update');
+    assert.deepEqual(call.params.change, { action: 'setInfo', avatar: null });
+
+    // A photo to set needs bytes.
+    res = await http(port, {
+      method: 'POST',
+      path: `/${helper.token}/api/groupInfo?info=${encodeURIComponent(
+        JSON.stringify({ conversationId: 'g1', photo: 'set' })
+      )}`,
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: Buffer.alloc(0),
+    });
+    assert.equal(res.status, 400);
   });
 
   it('searches messages, in all chats or one', async () => {

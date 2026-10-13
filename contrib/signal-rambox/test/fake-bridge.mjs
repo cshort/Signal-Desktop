@@ -163,6 +163,7 @@ export class FakeBridge {
     'conversations.manage',
     'contacts.read',
     'conversations.create',
+    'groups.manage',
   ];
   // contacts.list and conversations.find.
   contacts = [];
@@ -555,6 +556,7 @@ export class FakeBridge {
         this.#reply(session, id, { details });
         return;
       }
+      case 'groups.update':
       case 'conversations.update':
       case 'conversations.setTyping':
       case 'messages.markRead':

@@ -646,3 +646,38 @@ number; "New group" picks members (with chips), then name, photo and
 disappearing messages timer.
 
 WHY: Next gap on Mike's standing parity rule (2026-10-13).
+
+## F21. Fork only: group management
+
+DECISION: Signal's group details page. A new capability, `groups.manage`
+(one more line in the approval dialog: "Change your groups: name, photo,
+description, members, admins, group link and permissions, and leave
+groups"), allows `groups.update {conversationId, change}`, where `change`
+is one of Signal's group changes: `setInfo` (name, description, photo or
+null to remove), `addMembers`, `removeMember`, `setAdmin`,
+`approveRequest`, `denyRequest`, `revokeInvites`, `groupLink`,
+`resetGroupLink`, `groupLinkApproval`, `permissions` (add members, edit
+info, send messages: all or admins) and `leave`.
+
+Each calls the same ConversationModel method or modifyGroupV2 builder
+Signal's controls use, but directly rather than through the Redux actions,
+which wrap them in longRunningTaskWrapper: on the headless Signal its
+error dialog would stay open with nobody to close it, and the app needs the
+failure back. The checks Signal makes before offering a control come
+first (admin, canEditGroupInfo, canAddNewMembers, the last admin can't
+leave, own invites for non-admins, announcement-capable groups), with
+Signal's 32 and 480 grapheme limits; Signal's group server checks again.
+
+`conversations.getDetails` gains what the page shows: invites (named only
+when you sent them; others' as a count per inviter, as Signal), requests
+to join (admins only), whether the link is on and needs approval, the
+three permissions, whether "only admins send" is offered, and whether you
+can leave. The group link is now shown only while it is on.
+
+The page's group details gain Edit group (name, description, photo), Add
+members (the compose dialog's member picker), a menu on each member for
+admins (Make or Remove admin, Remove from group), Requests to join
+(Approve, Deny), Invited (Revoke), the Group link section (on/off, copy,
+approve new members, reset) and Permissions, and Leave group.
+
+WHY: Next gap on Mike's standing parity rule (2026-10-13).

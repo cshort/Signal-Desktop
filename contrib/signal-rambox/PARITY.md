@@ -54,7 +54,7 @@ Last reviewed: 2026-10-13, against the Signal release in fork main.
 | Per-chat settings: timer, mute, block, colors, nickname  | partial | F15: timer, mute, block; colors and nickname missing |
 | Media, files and links gallery                           | missing |                                                      |
 | Search inside a chat                                     | done    | F17                                                  |
-| Group management (add/remove, admins, link, name, photo) | missing |                                                      |
+| Group management (add/remove, admins, link, name, photo) | done    | F21: also requests, invites, permissions, leave      |
 | Poll-ended and other system notices                      | partial |                                                      |
 | Stories (view, post, reply)                              | missing |                                                      |
 | Calls (voice, video, group, call links)                  | missing | needs a microphone and camera path into Signal       |

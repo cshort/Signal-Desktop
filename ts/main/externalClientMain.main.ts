@@ -434,6 +434,8 @@ function getCapabilityLabel(
       return i18n('icu:ExternalClientCapability__conversations-manage');
     case Capability.ConversationsCreate:
       return i18n('icu:ExternalClientCapability__conversations-create');
+    case Capability.GroupsManage:
+      return i18n('icu:ExternalClientCapability__groups-manage');
     case Capability.TypingRead:
       return i18n('icu:ExternalClientCapability__typing-read');
     case Capability.TypingSend:

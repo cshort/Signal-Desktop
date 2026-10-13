@@ -43,6 +43,7 @@ export const CAPABILITIES = [
   'conversations.manage',
   'contacts.read',
   'conversations.create',
+  'groups.manage',
 ];
 
 // Signal answers at most 16 requests at once per app.

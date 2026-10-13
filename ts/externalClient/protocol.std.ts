@@ -56,6 +56,10 @@ export const Capability = {
   // Fork addition: start new chats (find people by username or phone number)
   // and create groups, as Signal's compose button does.
   ConversationsCreate: 'conversations.create',
+  // Fork addition: change groups (name, photo, description, members,
+  // admins, group link, permissions) and leave them, as Signal's group
+  // details page does.
+  GroupsManage: 'groups.manage',
 } as const;
 export type CapabilityType = (typeof Capability)[keyof typeof Capability];
 export const ALL_CAPABILITIES: ReadonlyArray<CapabilityType> =
@@ -77,6 +81,7 @@ export const IMPLEMENTED_CAPABILITIES: ReadonlyArray<CapabilityType> = [
   Capability.ConversationsManage,
   Capability.ContactsRead,
   Capability.ConversationsCreate,
+  Capability.GroupsManage,
 ];
 
 export const ErrorCode = {
@@ -161,6 +166,7 @@ export const Method = {
   ConversationsFind: 'conversations.find',
   ConversationsOpen: 'conversations.open',
   GroupsCreate: 'groups.create',
+  GroupsUpdate: 'groups.update',
 } as const;
 export type MethodType = (typeof Method)[keyof typeof Method];
 
@@ -205,6 +211,7 @@ export const SERVICE_METHOD_CAPABILITIES = {
   [Method.ConversationsFind]: Capability.ConversationsCreate,
   [Method.ConversationsOpen]: Capability.ConversationsCreate,
   [Method.GroupsCreate]: Capability.ConversationsCreate,
+  [Method.GroupsUpdate]: Capability.GroupsManage,
 } as const satisfies Partial<Record<MethodType, CapabilityType>>;
 export type ServiceMethodType = keyof typeof SERVICE_METHOD_CAPABILITIES;
 
@@ -1125,11 +1132,39 @@ export type ConversationDetailsDTO = Readonly<{
   // Invited, and asking to join through the group link.
   pendingCount: number;
   requestingCount: number;
-  // Only for admins, as in Signal.
+  // Only for admins, and only while the link is on, as in Signal.
   groupLink: string | null;
   areWeAdmin: boolean;
   canEditGroupInfo: boolean;
   canAddMembers: boolean;
+  // Fork additions (decision F21), as Signal's group details page shows
+  // them. Requests are listed only for admins.
+  invites: ReadonlyArray<GroupInviteDTO>;
+  requests: ReadonlyArray<GroupRequestDTO>;
+  groupLinkEnabled: boolean;
+  groupLinkApproval: boolean;
+  // 'admins' or 'all', as Signal's "Permissions" page.
+  addMembersAccess: 'all' | 'admins';
+  editInfoAccess: 'all' | 'admins';
+  sendMessagesAccess: 'all' | 'admins';
+  // Signal offers "Send messages: only admins" only when every member
+  // supports it.
+  canAnnounce: boolean;
+  // Signal keeps the last admin from leaving while others remain.
+  canLeave: boolean;
+}>;
+
+export type GroupInviteDTO = Readonly<{
+  conversationId: string;
+  author: AuthorDTO | null;
+  // Who sent the invite; null when unknown.
+  invitedBy: AuthorDTO | null;
+  invitedByMe: boolean;
+}>;
+
+export type GroupRequestDTO = Readonly<{
+  conversationId: string;
+  author: AuthorDTO | null;
 }>;
 
 export type ConversationsGetDetailsResultType = Readonly<{
@@ -1229,6 +1264,71 @@ export const groupsCreateParamsSchema = z
   .strict();
 export type GroupsCreateParamsType = z.infer<typeof groupsCreateParamsSchema>;
 
+// Fork addition: Signal's group details page (decision F21). Each change is
+// one group change, as Signal makes it; Signal's group server checks the
+// user may make it. Member ids come from conversations.getDetails (members,
+// invites, requests) or contacts.list (forGroup).
+export const MAX_GROUP_DESCRIPTION_GRAPHEMES = 480;
+const groupAccessSchema = z.enum(['all', 'admins']);
+const groupChangeSchema = z.discriminatedUnion('action', [
+  // Name, description and photo, as Signal's "Edit group" dialog. A null
+  // avatar removes the photo; an empty description clears it.
+  z.object({
+    action: z.literal('setInfo'),
+    name: z.string().min(1).max(256).optional(),
+    description: z.string().max(8192).optional(),
+    avatar: z
+      .string()
+      .max(Math.ceil(MAX_PROFILE_AVATAR_BYTES / 3) * 4)
+      .nullable()
+      .optional(),
+  }),
+  z.object({
+    action: z.literal('addMembers'),
+    memberIds: z.array(conversationIdSchema).min(1).max(1000),
+  }),
+  z.object({
+    action: z.literal('removeMember'),
+    memberId: conversationIdSchema,
+  }),
+  z.object({
+    action: z.literal('setAdmin'),
+    memberId: conversationIdSchema,
+    admin: z.boolean(),
+  }),
+  z.object({
+    action: z.literal('approveRequest'),
+    memberId: conversationIdSchema,
+  }),
+  z.object({
+    action: z.literal('denyRequest'),
+    memberId: conversationIdSchema,
+  }),
+  z.object({
+    action: z.literal('revokeInvites'),
+    memberIds: z.array(conversationIdSchema).min(1).max(1000),
+  }),
+  z.object({ action: z.literal('groupLink'), enabled: z.boolean() }),
+  z.object({ action: z.literal('resetGroupLink') }),
+  z.object({ action: z.literal('groupLinkApproval'), required: z.boolean() }),
+  z.object({
+    action: z.literal('permissions'),
+    addMembers: groupAccessSchema.optional(),
+    editInfo: groupAccessSchema.optional(),
+    sendMessages: groupAccessSchema.optional(),
+  }),
+  z.object({ action: z.literal('leave') }),
+]);
+export type GroupChangeType = z.infer<typeof groupChangeSchema>;
+
+export const groupsUpdateParamsSchema = z
+  .object({
+    conversationId: conversationIdSchema,
+    change: groupChangeSchema,
+  })
+  .strict();
+export type GroupsUpdateParamsType = z.infer<typeof groupsUpdateParamsSchema>;
+
 export type TypistDTO = Readonly<{
   authorConversationId: string;
   author: AuthorDTO | null;
@@ -1311,6 +1411,7 @@ export const SERVICE_PARAM_SCHEMAS = {
   [Method.ConversationsFind]: conversationsFindParamsSchema,
   [Method.ConversationsOpen]: conversationsOpenParamsSchema,
   [Method.GroupsCreate]: groupsCreateParamsSchema,
+  [Method.GroupsUpdate]: groupsUpdateParamsSchema,
 } as const satisfies Record<ServiceMethodType, z.ZodType>;
 
 export type ConversationsListParamsType = z.infer<

@@ -571,8 +571,11 @@ function renderConversations() {
 
 // --- new chat and new group (Signal's compose button) -----------------------
 
-// 'chat' | 'members' | 'info' while the dialog is open.
+// 'chat' | 'members' | 'info' while the dialog is open, or 'add' when
+// adding members to a group from its details.
 let composeStep = null;
+// While adding members: { conversationId, exclude: Set of member ids }.
+let addingTo = null;
 let composeContacts = [];
 const groupMembers = new Map();
 let groupPhoto = null;
@@ -626,9 +629,29 @@ async function openNewChat() {
 }
 
 function closeNewChat() {
+  const returnTo = addingTo?.conversationId;
   composeStep = null;
+  addingTo = null;
   $('new-chat').hidden = true;
   clearGroupPhoto();
+  if (returnTo) {
+    openDetails(returnTo);
+  }
+}
+
+// Signal's "Add members" on a group's details page.
+async function openAddMembers(c, d) {
+  groupMembers.clear();
+  addingTo = {
+    conversationId: c.id,
+    exclude: new Set([
+      ...d.members.map(m => m.conversationId),
+      ...d.invites.map(i => i.conversationId),
+    ]),
+  };
+  closeDetails();
+  $('new-chat').hidden = false;
+  await showComposeStep('add');
 }
 
 async function showComposeStep(step) {
@@ -637,10 +660,10 @@ async function showComposeStep(step) {
   $('new-chat-title').textContent =
     step === 'chat'
       ? 'New chat'
-      : step === 'members'
+      : step === 'members' || step === 'add'
         ? 'Add members'
         : 'Name this group';
-  $('new-chat-back').hidden = step === 'chat';
+  $('new-chat-back').hidden = step === 'chat' || step === 'add';
   $('new-chat-pick').hidden = !picking;
   $('new-group-info').hidden = picking;
   $('new-chat-foot').hidden = step === 'chat';
@@ -651,9 +674,12 @@ async function showComposeStep(step) {
       step === 'chat' ? 'Name, username or number' : 'Search contacts';
     try {
       const { contacts } = await api(
-        `api/contacts${step === 'members' ? '?forGroup=1' : ''}`
+        `api/contacts${step === 'chat' ? '' : '?forGroup=1'}`
       );
-      composeContacts = contacts;
+      composeContacts =
+        step === 'add'
+          ? contacts.filter(c => !addingTo.exclude.has(c.conversationId))
+          : contacts;
     } catch (error) {
       toast(`Couldn't load contacts (${error.code ?? error.message}).`);
       composeContacts = [];
@@ -749,7 +775,8 @@ function renderComposeList() {
 
 function renderMemberChips() {
   const chips = $('new-chat-chips');
-  chips.hidden = composeStep !== 'members' || groupMembers.size === 0;
+  const picking = composeStep === 'members' || composeStep === 'add';
+  chips.hidden = !picking || groupMembers.size === 0;
   chips.replaceChildren(
     ...[...groupMembers.values()].map(contact => {
       const chip = el('button', 'chip');
@@ -764,11 +791,15 @@ function renderMemberChips() {
     })
   );
   const count = groupMembers.size;
-  $('new-chat-count').textContent =
-    composeStep === 'members' ? `${count} member${count === 1 ? '' : 's'}` : '';
+  $('new-chat-count').textContent = picking
+    ? `${count} member${count === 1 ? '' : 's'}`
+    : '';
   if (composeStep === 'members') {
     $('new-chat-next').textContent = count === 0 ? 'Skip' : 'Next';
     $('new-chat-next').disabled = false;
+  } else if (composeStep === 'add') {
+    $('new-chat-next').textContent = 'Add';
+    $('new-chat-next').disabled = count === 0;
   }
 }
 
@@ -864,6 +895,22 @@ async function findAndOpen(query) {
 }
 
 async function composeNext() {
+  if (composeStep === 'add') {
+    if (groupMembers.size === 0) {
+      return;
+    }
+    $('new-chat-next').disabled = true;
+    const ok = await changeGroup(addingTo.conversationId, {
+      action: 'addMembers',
+      memberIds: [...groupMembers.keys()],
+    });
+    if (ok) {
+      closeNewChat();
+    } else {
+      $('new-chat-next').disabled = false;
+    }
+    return;
+  }
   if (composeStep === 'members') {
     await showComposeStep('info');
     return;
@@ -2450,6 +2497,9 @@ function renderRequestBar() {
 // --- chat details (Signal's chat details and About pages) ---
 
 let detailsFor = null;
+// The details last shown, and whether the group's edit form is open.
+let detailsData = null;
+let detailsEditing = false;
 
 function detailRow(iconName, label, sub) {
   const row = el('div', 'detail-row');
@@ -2463,12 +2513,18 @@ function detailRow(iconName, label, sub) {
   return row;
 }
 
-async function openDetails(conversationId) {
+async function openDetails(conversationId, { refresh = false } = {}) {
   const c = conversations.get(conversationId);
   if (!c) {
     return;
   }
   closePopovers();
+  if (refresh && (detailsFor !== conversationId || $('details').hidden)) {
+    return;
+  }
+  if (!refresh) {
+    detailsEditing = false;
+  }
   detailsFor = conversationId;
   $('details-title').textContent =
     c.type === 'group'
@@ -2477,7 +2533,9 @@ async function openDetails(conversationId) {
         ? 'Note to Self'
         : 'About';
   const body = $('details-body');
-  body.replaceChildren(el('p', 'setting-note', 'Loading…'));
+  if (!refresh) {
+    body.replaceChildren(el('p', 'setting-note', 'Loading…'));
+  }
   $('details').hidden = false;
   if (!capabilities.includes('contacts.read')) {
     renderDetails(c, null);
@@ -2504,7 +2562,13 @@ async function openDetails(conversationId) {
 }
 
 function renderDetails(c, d) {
+  detailsData = d;
   const body = $('details-body');
+  if (d?.type === 'group' && detailsEditing) {
+    body.replaceChildren(groupEditForm(c, d));
+    return;
+  }
+  const scroll = body.scrollTop;
   const head = el('div', 'details-head');
   head.append(
     conversationAvatar(c, 80),
@@ -2559,54 +2623,7 @@ function renderDetails(c, d) {
       rows.push(detailRow('note', d.note, 'Note'));
     }
   } else {
-    if (d.description) {
-      rows.push(el('p', 'details-description', d.description));
-    }
-    if (d.groupLink) {
-      const link = detailRow('forward', 'Group link', d.groupLink);
-      link.classList.add('clickable');
-      link.title = 'Copy group link';
-      link.addEventListener('click', () => {
-        copyText(d.groupLink);
-      });
-      rows.push(link);
-    }
-    rows.push(
-      el(
-        'div',
-        'setting-heading',
-        `${d.members.length} member${d.members.length === 1 ? '' : 's'}`
-      )
-    );
-    for (const m of d.members) {
-      const row = el('div', 'member-row');
-      const who = m.author ??
-        authorOf(m.conversationId) ?? { title: 'Someone' };
-      const text = el('div', 'detail-text');
-      text.append(el('div', 'detail-label', m.me ? 'You' : who.title));
-      if (who.label?.text) {
-        text.append(el('div', 'detail-sub', who.label.text));
-      }
-      row.append(avatar(m.conversationId, who, 36), text);
-      if (m.admin) {
-        row.append(el('span', 'member-admin', 'Admin'));
-      }
-      rows.push(row);
-    }
-    if (d.pendingCount > 0) {
-      rows.push(
-        el('p', 'setting-note', `${d.pendingCount} invited, not joined yet.`)
-      );
-    }
-    if (d.requestingCount > 0) {
-      rows.push(
-        el(
-          'p',
-          'setting-note',
-          `${d.requestingCount} asking to join through the group link.`
-        )
-      );
-    }
+    rows.push(...groupDetailRows(c, d));
   }
   if (!c.noteToSelf || canManageChats()) {
     const options = el('button', 'setting-button', 'Chat options');
@@ -2617,8 +2634,530 @@ function renderDetails(c, d) {
     });
     rows.push(el('div', 'details-actions'));
     rows.at(-1).append(options);
+    if (d?.type === 'group' && d.members.some(m => m.me)) {
+      const leave = el('button', 'setting-button danger', 'Leave group');
+      leave.type = 'button';
+      leave.addEventListener('click', () => confirmLeave(c, d));
+      rows.at(-1).append(leave);
+    }
   }
   body.replaceChildren(head, ...rows);
+  body.scrollTop = scroll;
+}
+
+// --- group management (Signal's group details page) -------------------------
+
+function canManageGroups() {
+  return capabilities.includes('groups.manage');
+}
+
+const GROUP_ERRORS = {
+  PERMISSION_DENIED: 'Only admins can do that.',
+  NOT_FOUND: "That person isn't in this group anymore.",
+};
+
+async function changeGroup(conversationId, change, { done } = {}) {
+  try {
+    await api('api/group', { conversationId, change });
+  } catch (error) {
+    toast(
+      GROUP_ERRORS[error.code] ??
+        (error.code === 'PRECONDITION_FAILED' && change.action === 'leave'
+          ? 'Make someone else an admin before you leave.'
+          : `Not changed (${error.code ?? error.message}).`)
+    );
+    openDetails(conversationId, { refresh: true });
+    return false;
+  }
+  if (done) {
+    toast(done);
+  }
+  openDetails(conversationId, { refresh: true });
+  return true;
+}
+
+function personTitle(author, conversationId, fallback = 'Someone') {
+  return (author ?? authorOf(conversationId))?.title ?? fallback;
+}
+
+function actionButton(label, onClick, className = '') {
+  const b = el('button', `setting-button small ${className}`.trim(), label);
+  b.type = 'button';
+  b.addEventListener('click', ev => {
+    ev.stopPropagation();
+    onClick(b);
+  });
+  return b;
+}
+
+function groupDetailRows(c, d) {
+  const rows = [];
+  const manage = canManageGroups();
+  if (d.description) {
+    rows.push(el('p', 'details-description', d.description));
+  }
+  if (manage && d.canEditGroupInfo) {
+    const edit = detailRow('edit', 'Edit group', 'Name, description and photo');
+    edit.classList.add('clickable');
+    edit.addEventListener('click', () => {
+      detailsEditing = true;
+      renderDetails(c, d);
+    });
+    rows.push(edit);
+  }
+
+  rows.push(
+    el(
+      'div',
+      'setting-heading',
+      `${d.members.length} member${d.members.length === 1 ? '' : 's'}`
+    )
+  );
+  if (manage && d.canAddMembers) {
+    const add = detailRow('group', 'Add members');
+    add.classList.add('clickable');
+    add.addEventListener('click', () => openAddMembers(c, d));
+    rows.push(add);
+  }
+  for (const m of d.members) {
+    const row = el('div', 'member-row');
+    const who = m.author ?? authorOf(m.conversationId) ?? { title: 'Someone' };
+    const text = el('div', 'detail-text');
+    text.append(el('div', 'detail-label', m.me ? 'You' : who.title));
+    if (who.label?.text) {
+      text.append(el('div', 'detail-sub', who.label.text));
+    }
+    row.append(avatar(m.conversationId, who, 36), text);
+    if (m.admin) {
+      row.append(el('span', 'member-admin', 'Admin'));
+    }
+    if (manage && d.areWeAdmin && !m.me) {
+      row.classList.add('clickable');
+      row.title = `Manage ${who.title}`;
+      row.addEventListener('click', ev => {
+        ev.stopPropagation();
+        openMemberMenu(c, m, who, row);
+      });
+    }
+    rows.push(row);
+  }
+
+  rows.push(...groupRequestRows(c, d, manage));
+
+  if (manage && d.areWeAdmin) {
+    rows.push(el('div', 'setting-heading', 'Group link'));
+    rows.push(
+      settingRow(
+        'Group link',
+        'Anyone with the link can see the group name and photo and ask to join.',
+        settingSwitch(d.groupLinkEnabled, on =>
+          changeGroup(c.id, { action: 'groupLink', enabled: on })
+        )
+      )
+    );
+    if (d.groupLinkEnabled) {
+      if (d.groupLink) {
+        const link = detailRow('copy', 'Copy link', d.groupLink);
+        link.classList.add('clickable');
+        link.addEventListener('click', () => copyText(d.groupLink));
+        rows.push(link);
+      }
+      rows.push(
+        settingRow(
+          'Approve new members',
+          'Require an admin to approve new members joining with the link.',
+          settingSwitch(d.groupLinkApproval, on =>
+            changeGroup(c.id, { action: 'groupLinkApproval', required: on })
+          )
+        )
+      );
+      const reset = detailRow('timer', 'Reset link');
+      reset.classList.add('clickable');
+      reset.addEventListener('click', () => {
+        if (
+          confirm(
+            "Reset group link? People won't be able to join the group with the current link."
+          )
+        ) {
+          changeGroup(
+            c.id,
+            { action: 'resetGroupLink' },
+            { done: 'Link reset.' }
+          );
+        }
+      });
+      rows.push(reset);
+    }
+
+    rows.push(el('div', 'setting-heading', 'Permissions'));
+    const who = [
+      ['all', 'All members'],
+      ['admins', 'Only admins'],
+    ];
+    rows.push(
+      settingRow(
+        'Add members',
+        'Who can add new members to this group.',
+        settingSelect(d.addMembersAccess, who, v =>
+          changeGroup(c.id, { action: 'permissions', addMembers: v })
+        )
+      ),
+      settingRow(
+        'Edit group info',
+        "Who can change this group's name, photo, description and disappearing messages timer.",
+        settingSelect(d.editInfoAccess, who, v =>
+          changeGroup(c.id, { action: 'permissions', editInfo: v })
+        )
+      )
+    );
+    if (d.canAnnounce) {
+      rows.push(
+        settingRow(
+          'Send messages',
+          'Who can send messages and start calls.',
+          settingSelect(d.sendMessagesAccess, who, v =>
+            changeGroup(c.id, { action: 'permissions', sendMessages: v })
+          )
+        )
+      );
+    }
+  }
+  return rows;
+}
+
+function groupRequestRows(c, d, manage) {
+  const rows = [];
+  const canAct = manage && d.areWeAdmin;
+  if (d.requests.length > 0) {
+    rows.push(el('div', 'setting-heading', 'Requests to join'));
+    for (const r of d.requests) {
+      const name = personTitle(r.author, r.conversationId);
+      const row = el('div', 'member-row');
+      const text = el('div', 'detail-text');
+      text.append(el('div', 'detail-label', name));
+      row.append(
+        avatar(r.conversationId, r.author ?? { title: name }, 36),
+        text
+      );
+      if (canAct) {
+        row.append(
+          actionButton('Deny', () => {
+            if (confirm(`Deny the request from ${name}?`)) {
+              changeGroup(c.id, {
+                action: 'denyRequest',
+                memberId: r.conversationId,
+              });
+            }
+          }),
+          actionButton(
+            'Approve',
+            () => {
+              if (confirm(`Add ${name} to the group?`)) {
+                changeGroup(
+                  c.id,
+                  { action: 'approveRequest', memberId: r.conversationId },
+                  { done: `${name} added.` }
+                );
+              }
+            },
+            'primary'
+          )
+        );
+      }
+      rows.push(row);
+    }
+  } else if (d.requestingCount > 0) {
+    rows.push(
+      el(
+        'p',
+        'setting-note',
+        `${d.requestingCount} asking to join through the group link.`
+      )
+    );
+  }
+
+  if (d.invites.length > 0) {
+    rows.push(el('div', 'setting-heading', 'Invited'));
+    const mine = d.invites.filter(i => i.invitedByMe);
+    for (const i of mine) {
+      const name = personTitle(i.author, i.conversationId);
+      const row = el('div', 'member-row');
+      const text = el('div', 'detail-text');
+      text.append(
+        el('div', 'detail-label', name),
+        el('div', 'detail-sub', 'Invited by you')
+      );
+      row.append(
+        avatar(i.conversationId, i.author ?? { title: name }, 36),
+        text
+      );
+      if (manage) {
+        row.append(
+          actionButton('Revoke', () => {
+            if (confirm(`Revoke the invitation to ${name}?`)) {
+              changeGroup(c.id, {
+                action: 'revokeInvites',
+                memberIds: [i.conversationId],
+              });
+            }
+          })
+        );
+      }
+      rows.push(row);
+    }
+    // As Signal: others' invites only as a count per inviter.
+    const byInviter = new Map();
+    for (const i of d.invites.filter(x => !x.invitedByMe)) {
+      const key = i.invitedBy?.title ?? 'Someone';
+      byInviter.set(key, [...(byInviter.get(key) ?? []), i]);
+    }
+    for (const [inviter, invites] of byInviter) {
+      const row = el('div', 'member-row');
+      const text = el('div', 'detail-text');
+      text.append(
+        el('div', 'detail-label', inviter),
+        el(
+          'div',
+          'detail-sub',
+          `Invited ${invites.length} ${invites.length === 1 ? 'person' : 'people'}`
+        )
+      );
+      row.append(
+        avatar(
+          `inviter:${inviter}`,
+          invites[0].invitedBy ?? { title: inviter },
+          36
+        ),
+        text
+      );
+      if (canAct) {
+        row.append(
+          actionButton('Revoke', () => {
+            if (
+              confirm(
+                `Revoke ${invites.length === 1 ? 'the invitation' : `${invites.length} invitations`} sent by ${inviter}?`
+              )
+            ) {
+              changeGroup(c.id, {
+                action: 'revokeInvites',
+                memberIds: invites.map(x => x.conversationId),
+              });
+            }
+          })
+        );
+      }
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+
+function openMemberMenu(c, m, who, anchor) {
+  closePopovers();
+  const menu = $('more-menu');
+  const items = [];
+  const add = (iconName, label, action) => {
+    const item = el('button', 'menu-item');
+    item.type = 'button';
+    item.setAttribute('role', 'menuitem');
+    item.append(icon(iconName), el('span', '', label));
+    item.addEventListener('click', ev => {
+      ev.stopPropagation();
+      closePopovers();
+      action();
+    });
+    items.push(item);
+  };
+  if (conversations.has(m.conversationId)) {
+    add('reply', 'Message', () => {
+      closeDetails();
+      selectConversation(m.conversationId);
+    });
+  }
+  add('check', m.admin ? 'Remove as admin' : 'Make admin', () => {
+    const text = m.admin
+      ? `Remove ${who.title} as group admin?`
+      : `Make ${who.title} a group admin? They'll be able to edit this group and its members.`;
+    if (confirm(text)) {
+      changeGroup(c.id, {
+        action: 'setAdmin',
+        memberId: m.conversationId,
+        admin: !m.admin,
+      });
+    }
+  });
+  add('trash', 'Remove from group', () => {
+    if (confirm(`Remove ${who.title} from ${displayTitle(c)}?`)) {
+      changeGroup(
+        c.id,
+        { action: 'removeMember', memberId: m.conversationId },
+        { done: `${who.title} removed.` }
+      );
+    }
+  });
+  menu.replaceChildren(...items);
+  placePopover(menu, anchor);
+}
+
+function confirmLeave(c, d) {
+  if (!canManageGroups()) {
+    toast('Allow this page to change groups in Signal to use this.');
+    return;
+  }
+  if (!d.canLeave) {
+    toast('Before you leave, choose at least one new admin for this group.');
+    return;
+  }
+  if (
+    !confirm(
+      'Leave group? You will no longer be able to send or receive messages in this group.'
+    )
+  ) {
+    return;
+  }
+  changeGroup(c.id, { action: 'leave' }, { done: 'You left the group.' });
+}
+
+// Signal's "Edit group" dialog: name, description and photo.
+function groupEditForm(c, d) {
+  const form = el('form', 'group-edit');
+  let photo = null;
+  let photoUrl = null;
+  let removePhoto = false;
+  const photoButton = el('button', 'group-photo-button');
+  photoButton.type = 'button';
+  photoButton.title = 'Change photo';
+  const showPhoto = () => {
+    if (photoUrl) {
+      const img = el('img');
+      img.src = photoUrl;
+      img.alt = '';
+      photoButton.replaceChildren(img);
+    } else if (removePhoto) {
+      photoButton.replaceChildren(icon('group'));
+    } else {
+      photoButton.replaceChildren(conversationAvatar(c, 80));
+    }
+  };
+  showPhoto();
+  photoButton.addEventListener('click', () => {
+    const input = el('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.addEventListener('change', async () => {
+      const [file] = input.files;
+      if (!file) {
+        return;
+      }
+      try {
+        photo = await squarePhoto(file);
+      } catch {
+        toast("That file isn't a picture this browser can read.");
+        return;
+      }
+      if (photoUrl) {
+        URL.revokeObjectURL(photoUrl);
+      }
+      photoUrl = URL.createObjectURL(photo);
+      removePhoto = false;
+      showPhoto();
+    });
+    input.click();
+  });
+  const removeButton = el('button', 'setting-button small', 'Remove photo');
+  removeButton.type = 'button';
+  removeButton.hidden = !c.avatarVersion;
+  removeButton.addEventListener('click', () => {
+    if (photoUrl) {
+      URL.revokeObjectURL(photoUrl);
+    }
+    photo = null;
+    photoUrl = null;
+    removePhoto = true;
+    removeButton.hidden = true;
+    showPhoto();
+  });
+
+  const name = el('input', 'setting-input');
+  name.type = 'text';
+  name.placeholder = 'Group name (required)';
+  name.value = d.title ?? displayTitle(c);
+  const description = el('textarea', 'setting-input');
+  description.placeholder = 'Group description';
+  description.rows = 3;
+  description.value = d.description ?? '';
+  const count = el('span', 'sub');
+  const save = el('button', 'setting-button primary', 'Save');
+  save.type = 'submit';
+  const cancel = el('button', 'setting-button', 'Cancel');
+  cancel.type = 'button';
+  cancel.addEventListener('click', () => {
+    detailsEditing = false;
+    if (photoUrl) {
+      URL.revokeObjectURL(photoUrl);
+    }
+    renderDetails(c, d);
+  });
+  const length = value => [...segmenter.segment(value.trim())].length;
+  const update = () => {
+    const n = length(name.value);
+    const desc = length(description.value);
+    // Signal's limits for a group name and description.
+    count.textContent = `${n}/32`;
+    save.disabled = n === 0 || n > 32 || desc > 480;
+  };
+  name.addEventListener('input', update);
+  description.addEventListener('input', update);
+  update();
+  form.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    if (save.disabled) {
+      return;
+    }
+    save.disabled = true;
+    const info = {
+      conversationId: c.id,
+      name: name.value.trim(),
+      description: description.value.trim(),
+      ...(photo ? { photo: 'set' } : removePhoto ? { photo: 'remove' } : {}),
+    };
+    try {
+      const res = await fetch(
+        `api/groupInfo?${new URLSearchParams({ info: JSON.stringify(info) })}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: photo ?? new Blob([]),
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        throw Object.assign(new Error(`HTTP ${res.status}`), {
+          code: data.error?.code,
+        });
+      }
+    } catch (error) {
+      toast(
+        GROUP_ERRORS[error.code] ??
+          `Not saved (${error.code ?? error.message}).`
+      );
+      update();
+      return;
+    }
+    if (photoUrl) {
+      URL.revokeObjectURL(photoUrl);
+    }
+    detailsEditing = false;
+    toast('Group updated.');
+    openDetails(c.id, { refresh: true });
+  });
+  const photoRow = el('div', 'group-edit-photo');
+  photoRow.append(photoButton, removeButton);
+  const foot = el('div', 'details-actions');
+  foot.append(count, cancel, save);
+  form.append(photoRow, name, description, foot);
+  setTimeout(() => name.focus());
+  return form;
 }
 
 function closeDetails() {
