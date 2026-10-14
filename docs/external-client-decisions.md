@@ -897,6 +897,5 @@ and spoilers copy plain. Pasting into the page reverses it, serif letters
 included, into Signal's styles.
 
 WHY: Mike asked (2026-10-14 15:16 PT) for formatting that survives a paste
-into an SMS, as yaytext.com does, and for markdown shortcuts. Sending real
-formatting rather than Unicode letters was the default picked while his
-choice was open.
+into an SMS, as yaytext.com does, and for markdown shortcuts. He chose
+real formatting over sending Unicode letters (2026-10-14 15:47 PT).
