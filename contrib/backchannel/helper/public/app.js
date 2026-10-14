@@ -5830,8 +5830,11 @@ let mentionQuery = null;
 let mentionChoices = [];
 let mentionIndex = 0;
 
+// The forward dialog's box while that dialog is open (decision F32).
+let composeTarget = null;
+
 function composeBox() {
-  return $('compose');
+  return composeTarget ?? $('compose');
 }
 
 // [{ ch, styles: Set, mention?: { conversationId, title } }]
@@ -6277,6 +6280,10 @@ function sendTyping(typing) {
 }
 
 function onComposeInput() {
+  if (composeTarget) {
+    onForwardInput();
+    return;
+  }
   const box = composeBox();
   if (box.childNodes.length > 0 && readCompose().length === 0) {
     box.replaceChildren();
@@ -6312,6 +6319,10 @@ function resetLinkPreview() {
 }
 
 async function updateLinkPreview() {
+  // The forward dialog's box isn't the message box (decision F32).
+  if (composeTarget) {
+    return;
+  }
   const seq = ++previewSeq;
   const text = composeForSend().body;
   // As Signal: no link preview with attachments, or while editing.
@@ -6839,19 +6850,32 @@ function mentionTrigger() {
   return { start: at.start - length - 1, end: at.start, query: match[2] };
 }
 
+// The groups whose members can be mentioned: the chat's, or in the forward
+// dialog every group picked (decision F32).
+function mentionGroups() {
+  const ids = composeTarget ? [...forwardSelected] : [selectedId];
+  return ids.filter(id => conversations.get(id)?.type === 'group');
+}
+
 async function updateMentionPicker() {
-  const c = conversations.get(selectedId);
-  const trigger = c?.type === 'group' ? mentionTrigger() : null;
+  const groups = mentionGroups();
+  const trigger = groups.length > 0 ? mentionTrigger() : null;
   if (!trigger) {
     closeMentionPicker();
     return;
   }
-  const conversationId = selectedId;
-  const members = await loadMembers(conversationId);
+  const lists = await Promise.all(groups.map(loadMembers));
   const now = mentionTrigger();
-  if (selectedId !== conversationId || !now || now.query !== trigger.query) {
+  if (
+    mentionGroups().join() !== groups.join() ||
+    !now ||
+    now.query !== trigger.query
+  ) {
     return;
   }
+  const members = [
+    ...new Map(lists.flat().map(m => [m.conversationId, m])).values(),
+  ].sort((a, b) => a.author.title.localeCompare(b.author.title));
   mentionQuery = now;
   // Everyone who matches, as Signal lists them; the list scrolls.
   mentionChoices = members.filter(m => matchesMention(m, now.query));
@@ -6918,27 +6942,96 @@ function pickMention(member) {
 }
 
 // --- message box events ----------------------------------------------------------
-
-{
-  const box = composeBox();
+// The message box, and the forward dialog's (decision F32), share all of
+// this; composeBox() is whichever one is being edited.
+function wireComposeBox(box, onInput) {
   // Plain-text editing keeps the browser from adding its own markup; the
   // styles here come only from this code.
   box.contentEditable = 'plaintext-only';
   if (box.contentEditable !== 'plaintext-only') {
     box.contentEditable = 'true';
   }
-}
-composeBox().addEventListener('input', onComposeInput);
-composeBox().addEventListener('blur', () => {
-  closeMentionPicker();
-  $('format-bar').hidden = true;
-});
-composeBox().addEventListener('beforeinput', e => {
-  // The browser's own bold and the like would bypass Signal's styles.
-  if (e.inputType.startsWith('format')) {
+  box.addEventListener('input', onInput);
+  box.addEventListener('blur', () => {
+    closeMentionPicker();
+    $('format-bar').hidden = true;
+  });
+  box.addEventListener('beforeinput', e => {
+    // The browser's own bold and the like would bypass Signal's styles.
+    if (e.inputType.startsWith('format')) {
+      e.preventDefault();
+    }
+  });
+  box.addEventListener('contextmenu', e => {
+    const at = selectionOffsets();
+    if (e.shiftKey || !at || at.start === at.end) {
+      return;
+    }
     e.preventDefault();
-  }
-});
+    openFormatMenu(e.clientX, e.clientY);
+  });
+  box.addEventListener('drop', e => {
+    if (e.dataTransfer?.files.length) {
+      return;
+    }
+    // Dropped text comes in plain, where it was dropped.
+    e.preventDefault();
+    const text = e.dataTransfer?.getData('text/plain') ?? '';
+    const point = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+    if (point && composeBox().contains(point.startContainer)) {
+      const at = offsetAt(point.startContainer, point.startOffset);
+      composeSelection = { start: at, end: at };
+      window.getSelection().removeAllRanges();
+    }
+    insertPlain(text);
+  });
+  box.addEventListener(
+    'keydown',
+    e => {
+      if (!$('mention-picker').hidden && mentionChoices.length > 0) {
+        const move = { ArrowDown: 1, ArrowUp: -1 }[e.key];
+        if (move) {
+          mentionIndex =
+            (mentionIndex + move + mentionChoices.length) %
+            mentionChoices.length;
+          renderMentionPicker();
+        } else if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
+          pickMention(mentionChoices[mentionIndex]);
+        } else if (e.key === 'Escape') {
+          closeMentionPicker();
+        } else {
+          return;
+        }
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
+      if (e.key === 'Enter' && e.shiftKey && !e.isComposing) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        insertPlain('\n');
+        return;
+      }
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) {
+        return;
+      }
+      const key = e.key.toLowerCase();
+      const style = e.shiftKey
+        ? { x: 'strikethrough', b: 'spoiler' }[key]
+        : { b: 'bold', i: 'italic', e: 'monospace' }[key];
+      if (style) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        toggleStyle(style);
+      } else if (key === 'u' && !e.shiftKey) {
+        // Signal has no underline.
+        e.preventDefault();
+      }
+    },
+    { capture: true }
+  );
+}
+wireComposeBox($('compose'), onComposeInput);
 document.addEventListener('selectionchange', () => {
   const at = selectionOffsets();
   if (at) {
@@ -6951,73 +7044,6 @@ document.addEventListener('selectionchange', () => {
     }
   }
 });
-composeBox().addEventListener('contextmenu', e => {
-  const at = selectionOffsets();
-  if (e.shiftKey || !at || at.start === at.end) {
-    return;
-  }
-  e.preventDefault();
-  openFormatMenu(e.clientX, e.clientY);
-});
-composeBox().addEventListener('drop', e => {
-  if (e.dataTransfer?.files.length) {
-    return;
-  }
-  // Dropped text comes in plain, where it was dropped.
-  e.preventDefault();
-  const text = e.dataTransfer?.getData('text/plain') ?? '';
-  const point = document.caretRangeFromPoint?.(e.clientX, e.clientY);
-  if (point && composeBox().contains(point.startContainer)) {
-    const at = offsetAt(point.startContainer, point.startOffset);
-    composeSelection = { start: at, end: at };
-    window.getSelection().removeAllRanges();
-  }
-  insertPlain(text);
-});
-composeBox().addEventListener(
-  'keydown',
-  e => {
-    if (!$('mention-picker').hidden && mentionChoices.length > 0) {
-      const move = { ArrowDown: 1, ArrowUp: -1 }[e.key];
-      if (move) {
-        mentionIndex =
-          (mentionIndex + move + mentionChoices.length) % mentionChoices.length;
-        renderMentionPicker();
-      } else if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
-        pickMention(mentionChoices[mentionIndex]);
-      } else if (e.key === 'Escape') {
-        closeMentionPicker();
-      } else {
-        return;
-      }
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      return;
-    }
-    if (e.key === 'Enter' && e.shiftKey && !e.isComposing) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      insertPlain('\n');
-      return;
-    }
-    if (!(e.ctrlKey || e.metaKey) || e.altKey) {
-      return;
-    }
-    const key = e.key.toLowerCase();
-    const style = e.shiftKey
-      ? { x: 'strikethrough', b: 'spoiler' }[key]
-      : { b: 'bold', i: 'italic', e: 'monospace' }[key];
-    if (style) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      toggleStyle(style);
-    } else if (key === 'u' && !e.shiftKey) {
-      // Signal has no underline.
-      e.preventDefault();
-    }
-  },
-  { capture: true }
-);
 document.addEventListener('mousedown', e => {
   if (!e.target.closest?.('#format-menu')) {
     closeFormatMenu();
@@ -7286,7 +7312,7 @@ function renderForwardCount() {
   const n = forwardSelected.size;
   $('forward-count').textContent =
     n === 0 ? 'Pick chats' : `${n} chat${n === 1 ? '' : 's'} selected`;
-  $('forward-send').disabled = n === 0;
+  $('forward-send').disabled = n === 0 || forwardIsEmpty();
   const verb = forwarding?.kind === 'poll' ? 'Send' : 'Forward';
   $('forward-send').textContent = n > 1 ? `${verb} to ${n} chats` : verb;
 }
@@ -7294,6 +7320,134 @@ function renderForwardCount() {
 function openForward(m) {
   forwarding = { kind: 'message', message: m };
   showForward([]);
+  startForwardEdit(m);
+}
+
+// --- forward: edit the text, @mention, drop attachments (decision F32) ---------
+
+// { original, keep: Set of attachment indexes, total, savedSelection }
+let forwardEdit = null;
+
+function startForwardEdit(m) {
+  // Stickers go as they are, as in Signal.
+  if (m.kind !== 'text') {
+    return;
+  }
+  forwardEdit = {
+    message: m,
+    keep: new Set(m.attachments.map((_, i) => i)),
+    savedSelection: composeSelection,
+  };
+  composeTarget = $('forward-compose');
+  setCompose(m.body ?? '', m.mentions ?? [], m.formatting ?? []);
+  forwardEdit.original = JSON.stringify(composeForSend());
+  renderForwardAttachments();
+  renderForwardEditNote();
+  $('forward-edit').hidden = false;
+}
+
+function endForwardEdit() {
+  if (!forwardEdit) {
+    return;
+  }
+  closeMentionPicker();
+  closeFormatMenu();
+  $('format-bar').hidden = true;
+  $('forward-compose').replaceChildren();
+  composeTarget = null;
+  composeSelection = forwardEdit.savedSelection;
+  forwardEdit = null;
+  $('forward-edit').hidden = true;
+}
+
+function renderForwardAttachments() {
+  const m = forwardEdit.message;
+  const tray = $('forward-attachments');
+  tray.hidden = m.attachments.length === 0;
+  tray.replaceChildren(
+    ...m.attachments.flatMap((a, index) => {
+      if (!forwardEdit.keep.has(index)) {
+        return [];
+      }
+      const tile = el('span', 'draft');
+      if (a.hasThumbnail) {
+        const img = el('img', 'draft-image');
+        img.alt = '';
+        img.src = `api/thumbnail?${attachmentParams(m, index, {
+          width: String(previewWidth(64)),
+        })}`;
+        tile.append(img);
+      } else {
+        tile.classList.add('draft-file');
+        tile.append(
+          icon('file'),
+          el(
+            'span',
+            'draft-name',
+            a.fileName ?? (a.isVoiceMessage ? 'Voice message' : 'File')
+          )
+        );
+      }
+      const remove = el('button', 'draft-remove');
+      remove.type = 'button';
+      remove.title = "Don't forward this";
+      remove.setAttribute('aria-label', "Don't forward this");
+      remove.append(icon('close'));
+      remove.addEventListener('click', () => {
+        forwardEdit.keep.delete(index);
+        renderForwardAttachments();
+        renderForwardCount();
+      });
+      tile.append(remove);
+      return [tile];
+    })
+  );
+}
+
+// Mentions notify only where that person is in the group.
+function renderForwardEditNote() {
+  const hasMention = readCompose().some(c => c.mention);
+  $('forward-mention-note').hidden = !hasMention;
+}
+
+function onForwardInput() {
+  const box = composeBox();
+  if (box.childNodes.length > 0 && readCompose().length === 0) {
+    box.replaceChildren();
+  }
+  updateMentionPicker();
+  updateFormatBar();
+  renderForwardEditNote();
+  renderForwardCount();
+}
+
+// The edit to send, or null when the message goes as it is.
+function forwardEditPayload() {
+  if (!forwardEdit) {
+    return null;
+  }
+  const text = composeForSend();
+  const total = forwardEdit.message.attachments.length;
+  if (
+    JSON.stringify(text) === forwardEdit.original &&
+    forwardEdit.keep.size === total
+  ) {
+    return null;
+  }
+  return {
+    body: text.body,
+    ...(text.mentions.length > 0 ? { mentions: text.mentions } : {}),
+    ...(text.formatting.length > 0 ? { formatting: text.formatting } : {}),
+    attachmentIndexes: [...forwardEdit.keep].sort((a, b) => a - b),
+  };
+}
+
+function forwardIsEmpty() {
+  return (
+    forwardEdit !== null &&
+    forwardEdit.keep.size === 0 &&
+    composeForSend().body.trim() === ''
+  );
 }
 
 // Signal can't forward a poll; this sends a new poll with the same question
@@ -7321,6 +7475,7 @@ function showForward(preselected) {
 }
 
 function closeForward() {
+  endForwardEdit();
   forwarding = null;
   $('forward').hidden = true;
 }
@@ -7332,6 +7487,7 @@ async function sendForward() {
   const conversationIds = [...forwardSelected];
   const poll = forwarding.kind === 'poll';
   const done = poll ? 'Sent' : 'Forwarded';
+  const edit = poll ? null : forwardEditPayload();
   $('forward-send').disabled = true;
   try {
     const { results } = poll
@@ -7339,6 +7495,7 @@ async function sendForward() {
       : await api('api/forward', {
           messageId: forwarding.message.id,
           conversationIds,
+          ...(edit ? { edit } : {}),
         });
     const failed = results.filter(r => !r.ok);
     closeForward();
@@ -7378,6 +7535,17 @@ $('forward').addEventListener('click', e => {
   }
 });
 $('forward-search').addEventListener('input', renderForwardList);
+wireComposeBox($('forward-compose'), onForwardInput);
+$('forward-compose').addEventListener('paste', e => {
+  e.preventDefault();
+  insertPlain(e.clipboardData?.getData('text/plain') ?? '');
+});
+$('forward-compose').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    insertPlain('\n');
+  }
+});
 $('forward-send').addEventListener('click', sendForward);
 
 // --- polls ---------------------------------------------------------------------

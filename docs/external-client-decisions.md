@@ -857,3 +857,22 @@ does: Mike's preference (2026-10-13 17:05 PT).
 
 WHY: Mike asked (2026-10-13 17:05 PT); it was the largest missing view on
 the parity list.
+
+## F32. Fork only: editing and tagging when forwarding
+
+DECISION: `messages.forward` takes an optional `edit {body, mentions?,
+formatting?, attachmentIndexes}`: the text as edited in the dialog (Signal's
+Forward also lets you edit it), the original's attachments to keep, and
+@mentions, which Signal's Forward doesn't offer. Because one forward goes to
+many chats, each chat gets its own text: a mention stays a mention where
+that person is a member of the group, and becomes "@Name" text elsewhere,
+with styles moved to match (`forwardEdit.std.ts`). Chats that end up with
+the same text are sent together. A link preview stays only while its link
+is in the text. Stickers and shared contacts can't be edited. Without
+`edit`, a forward is exactly Signal's.
+
+The page's Forward dialog has the message box's editor (styles, the format
+menu and bar, the @ picker offering members of every group picked) and the
+attachments with a remove button; it says where a tag will notify.
+
+WHY: Mike asked (2026-10-13 17:06 PT).

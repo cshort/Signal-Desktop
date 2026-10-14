@@ -3764,3 +3764,37 @@ label.poll-option {
   margin: 48px 0;
   text-align: center;
 }
+
+/* Forward: edit the text, @mention, drop attachments (decision F32). */
+.forward-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.forward-edit[hidden] {
+  display: none;
+}
+
+.forward-edit .compose {
+  flex: none;
+  max-height: 120px;
+}
+
+.forward-edit .draft-tray {
+  padding: 0;
+}
+
+.forward-edit .modal-note {
+  margin: 0 4px;
+  font-size: 12px;
+}
+
+/* The message box's popovers also serve the forward dialog's box. */
+#mention-picker,
+#format-bar,
+#format-menu {
+  z-index: 40;
+}

@@ -229,6 +229,36 @@ describe('externalClient/protocol', () => {
       );
     });
 
+    it('forwards an edited text with mentions and fewer attachments', () => {
+      const forward = {
+        messageId: conversationId,
+        conversationIds: [conversationId],
+      };
+      assert.isTrue(
+        accepts(messagesForwardParamsSchema, {
+          ...forward,
+          edit: {
+            body: 'look \uFFFC',
+            mentions: [{ start: 5, conversationId }],
+            formatting: [{ start: 0, length: 4, style: 'bold' }],
+            attachmentIndexes: [0, 2],
+          },
+        })
+      );
+      assert.isFalse(
+        accepts(messagesForwardParamsSchema, {
+          ...forward,
+          edit: { body: 'x', attachmentIndexes: [-1] },
+        })
+      );
+      assert.isFalse(
+        accepts(messagesForwardParamsSchema, {
+          ...forward,
+          edit: { body: 'x', attachmentIndexes: [], quote: 'y' },
+        })
+      );
+    });
+
     it("keeps polls inside Signal's limits", () => {
       const poll = {
         conversationIds: [conversationId],

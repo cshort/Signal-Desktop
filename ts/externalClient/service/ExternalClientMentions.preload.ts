@@ -47,6 +47,11 @@ function getMentionableMembers(model: ConversationModel): Array<MemberType> {
   return members;
 }
 
+// Who a mention can name in this chat (decision F32).
+export function getMentionableIds(model: ConversationModel): Set<string> {
+  return new Set(getMentionableMembers(model).map(m => m.conversationId));
+}
+
 export function getMembers({
   conversationId,
 }: ConversationsGetMembersParamsType): ServiceResultType {

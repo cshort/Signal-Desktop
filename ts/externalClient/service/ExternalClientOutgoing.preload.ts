@@ -15,6 +15,8 @@ import {
   getMessagePropsSelector,
 } from '../../state/selectors/message.preload.ts';
 import type { MessageAttributesType } from '../../model-types.d.ts';
+import type { ConversationModel } from '../../models/conversations.preload.ts';
+import type { HydratedBodyRangesType } from '../../types/BodyRange.std.ts';
 import * as Bytes from '../../Bytes.std.ts';
 import { SignalService as Proto } from '../../protobuf/index.std.ts';
 import type {
@@ -61,6 +63,11 @@ import type {
   SendBlockReasonType,
 } from '../protocol.std.ts';
 import { ErrorCode, SendBlockReason } from '../protocol.std.ts';
+import { rewriteForChat } from '../forwardEdit.std.ts';
+import {
+  getMentionableIds,
+  toBodyRanges,
+} from './ExternalClientMentions.preload.ts';
 import { getSendBlockReason } from './ExternalClientSend.preload.ts';
 import {
   getDtoContext,
@@ -262,7 +269,8 @@ export function shouldSendHighQualityImages(): boolean {
 
 // Builds the same draft Signal's Forward dialog would (toMessageForwardDraft).
 async function getForwardDraft(
-  messageId: string
+  messageId: string,
+  keep?: ReadonlySet<number>
 ): Promise<ForwardMessageData | SendBlockReasonType | 'notFound'> {
   const message = await getMessageById(messageId);
   if (!message) {
@@ -283,14 +291,16 @@ async function getForwardDraft(
   const hasMediaBackups = getHasMediaBackups(state);
   const props = getMessagePropsSelector(state)(attributes);
   const draft: MessageForwardDraft = {
-    attachments: (props.attachments ?? []).filter(attachment =>
-      isDownloadableOrBackfillable({
-        attachment,
-        attachmentType: 'attachment',
-        isStory: attributes.type === 'story',
-        hasMediaBackups,
-      })
-    ),
+    attachments: (props.attachments ?? [])
+      .filter((_attachment, index) => !keep || keep.has(index))
+      .filter(attachment =>
+        isDownloadableOrBackfillable({
+          attachment,
+          attachmentType: 'attachment',
+          isStory: attributes.type === 'story',
+          hasMediaBackups,
+        })
+      ),
     bodyRanges: hydrateRanges(props.bodyRanges, getConversationSelector(state)),
     hasContact: Boolean(props.contact),
     isSticker: Boolean(props.isSticker),
@@ -308,24 +318,64 @@ async function getForwardDraft(
   return { draft, originalMessage: attributes };
 }
 
+type ForwardEditType = NonNullable<MessagesForwardParamsType['edit']>;
+
+// The edited text for one chat (decision F32), as Signal's body ranges.
+function editForChat(
+  model: ConversationModel,
+  edit: ForwardEditType
+): Readonly<{ body: string; ranges: HydratedBodyRangesType }> | undefined {
+  const members = getMentionableIds(model);
+  const text = rewriteForChat(
+    {
+      body: edit.body,
+      mentions: edit.mentions ?? [],
+      formatting: edit.formatting ?? [],
+    },
+    id => members.has(id),
+    id => window.ConversationController.get(id)?.getTitle() ?? 'Someone'
+  );
+  const ranges =
+    text && toBodyRanges(model, text.body, text.mentions, text.formatting);
+  if (!text || !ranges) {
+    return undefined;
+  }
+  return {
+    body: text.body,
+    ranges:
+      hydrateRanges(
+        ranges,
+        getConversationSelector(window.reduxStore.getState())
+      ) ?? [],
+  };
+}
+
 export async function forwardMessage({
   messageId,
   conversationIds,
+  edit,
 }: MessagesForwardParamsType): Promise<ServiceResultType> {
   // Only messages the client can read in a listed conversation.
   const source = await loadMessage(messageId);
   if (!source || !getListedConversation(source.conversationId)) {
     return { ok: false, code: ErrorCode.NotFound };
   }
-  const forward = await getForwardDraft(messageId);
+  const forward = await getForwardDraft(
+    messageId,
+    edit ? new Set(edit.attachmentIndexes) : undefined
+  );
   if (forward === 'notFound') {
     return { ok: false, code: ErrorCode.NotFound };
   }
   if (typeof forward === 'string') {
     return { ok: false, code: ErrorCode.PreconditionFailed, reason: forward };
   }
+  // Stickers and shared contacts go as they are, as in Signal.
+  if (edit && (forward.draft.isSticker || forward.draft.hasContact)) {
+    return { ok: false, code: ErrorCode.InvalidArgument };
+  }
 
-  const body = forward.draft.messageBody ?? '';
+  const body = edit?.body ?? forward.draft.messageBody ?? '';
   const results: Array<ForwardResultDTO> = [];
   const allowed: Array<string> = [];
   for (const conversationId of new Set(conversationIds)) {
@@ -345,9 +395,44 @@ export async function forwardMessage({
     allowed.push(conversationId);
   }
 
-  if (allowed.length > 0) {
-    const sent = await maybeForwardMessages([forward], allowed);
-    for (const conversationId of allowed) {
+  // Chats that get the same text are sent together, as one forward.
+  const batches = new Map<
+    string,
+    { data: ForwardMessageData; ids: Array<string> }
+  >();
+  for (const conversationId of allowed) {
+    let data: ForwardMessageData = forward;
+    if (edit) {
+      const model = getListedConversation(conversationId);
+      const edited = model && editForChat(model, edit);
+      if (!edited) {
+        return { ok: false, code: ErrorCode.InvalidArgument };
+      }
+      data = {
+        ...forward,
+        draft: {
+          ...forward.draft,
+          messageBody: edited.body,
+          bodyRanges: edited.ranges,
+          // A link preview stays only while its link is in the text.
+          previews: forward.draft.previews.filter(p =>
+            edited.body.includes(p.url)
+          ),
+        },
+      };
+      if (!isDraftForwardable(data.draft)) {
+        return { ok: false, code: ErrorCode.InvalidArgument };
+      }
+    }
+    const key = JSON.stringify([data.draft.messageBody, data.draft.bodyRanges]);
+    const batch = batches.get(key) ?? { data, ids: [] };
+    batch.ids.push(conversationId);
+    batches.set(key, batch);
+  }
+  for (const { data, ids } of batches.values()) {
+    // oxlint-disable-next-line no-await-in-loop
+    const sent = await maybeForwardMessages([data], ids);
+    for (const conversationId of ids) {
       results.push({
         conversationId,
         ok: sent,

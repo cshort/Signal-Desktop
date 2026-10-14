@@ -298,6 +298,22 @@
         />
         <div class="modal-note sub" id="forward-note" hidden></div>
         <ul class="forward-list" id="forward-list"></ul>
+        <div class="forward-edit" id="forward-edit" hidden>
+          <div class="draft-tray" id="forward-attachments" hidden></div>
+          <div
+            id="forward-compose"
+            class="compose"
+            role="textbox"
+            aria-multiline="true"
+            aria-label="Message"
+            data-placeholder="Add a message"
+            spellcheck="true"
+          ></div>
+          <div class="modal-note sub" id="forward-mention-note" hidden>
+            Tags notify people in groups they're in. In other chats they show as
+            plain @Name text.
+          </div>
+        </div>
         <div class="modal-foot">
           <span id="forward-count" class="sub"></span>
           <button type="button" id="forward-send" disabled>Forward</button>

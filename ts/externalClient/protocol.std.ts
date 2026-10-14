@@ -846,6 +846,22 @@ export const messagesForwardParamsSchema = z
       .array(conversationIdSchema)
       .min(1)
       .max(MAX_FORWARD_CONVERSATIONS),
+    // Fork addition (decision F32): the message as edited in the dialog,
+    // as Signal's Forward lets you edit it, plus @mentions. A mention goes
+    // out as one in chats where that person is a member, and as "@Name"
+    // text elsewhere. `attachmentIndexes` are the original's attachments
+    // to keep.
+    edit: z
+      .object({
+        body: z.string().max(MAX_SEND_BODY_LENGTH),
+        mentions: mentionsSchema.optional(),
+        formatting: formattingSchema.optional(),
+        attachmentIndexes: z
+          .array(z.number().int().min(0).max(MAX_SEND_ATTACHMENTS))
+          .max(MAX_SEND_ATTACHMENTS),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type MessagesForwardParamsType = z.infer<

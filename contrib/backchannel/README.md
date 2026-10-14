@@ -46,6 +46,9 @@ Backchannel does. Each new one is added here when it ships.
   two.
 - **Scheduled messages.** Signal Desktop has none. Backchannel sends them
   from your server at the time you pick, even with your PC off.
+- **Edit and tag when forwarding.** Signal lets you edit a forward's text;
+  Backchannel also lets you @mention people. Each chat gets a real tag
+  where that person is in the group, and plain "@Name" text elsewhere.
 
 ## Quick start
 

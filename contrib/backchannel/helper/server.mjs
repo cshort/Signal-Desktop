@@ -930,10 +930,11 @@ export function createWebServer({
       return;
     }
     if (req.method === 'POST' && route === 'api/forward') {
-      const { messageId, conversationIds } = await readJson(req);
+      const { messageId, conversationIds, edit } = await readJson(req);
       const result = await bridge.call('messages.forward', {
         messageId,
         conversationIds,
+        ...(edit ? { edit } : {}),
       });
       sendJson(res, 200, result);
       return;
