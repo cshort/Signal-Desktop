@@ -876,3 +876,27 @@ menu and bar, the @ picker offering members of every group picked) and the
 attachments with a remove button; it says where a tag will notify.
 
 WHY: Mike asked (2026-10-13 17:06 PT).
+
+## F33. Fork only: markdown shortcuts and Unicode-styled copies
+
+DECISION: In the page's message boxes, typing a closing mark applies
+Signal's own style to the text between the marks and removes them: \*bold\*,
+\_italic\_, \~strikethrough\~, \`monospace\`. Marks nest, so \_\*text\*\_ is
+bold italic. The opening mark must not follow a letter or digit, and the
+text must not start or end with a space, so 2\*3\*4 and snake_case stay as
+typed. Backspace right after a conversion restores the marks. What is sent
+is Signal's formatting (body ranges), not special characters, so it stays
+searchable and readable by screen readers on every Signal app.
+
+Copying styled text (Copy text in a message's menu, or a selection within
+one message or in the message box) puts plain text on the clipboard with
+the styles written in Unicode's mathematical sans-serif letters (bold,
+italic, bold italic, monospace) and a combining stroke (U+0336) for
+strikethrough. Only A to Z and 0 to 9 have such letters; other characters
+and spoilers copy plain. Pasting into the page reverses it, serif letters
+included, into Signal's styles.
+
+WHY: Mike asked (2026-10-14 15:16 PT) for formatting that survives a paste
+into an SMS, as yaytext.com does, and for markdown shortcuts. Sending real
+formatting rather than Unicode letters was the default picked while his
+choice was open.

@@ -2119,20 +2119,6 @@ function renderGallery() {
 
 // --- message text: mentions, formatting, links ----------------------------------
 
-// The body with mentions written out, for copying and quoting.
-function plainText(m) {
-  let text = m.body ?? '';
-  for (const mention of [...(m.mentions ?? [])].sort(
-    (a, b) => b.start - a.start
-  )) {
-    text =
-      text.slice(0, mention.start) +
-      `@${mention.title ?? 'Someone'}` +
-      text.slice(mention.start + mention.length);
-  }
-  return text;
-}
-
 const URL_PATTERN = /\bhttps?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]]/gi;
 
 function appendLinkified(parent, text) {
@@ -5057,7 +5043,7 @@ function openMoreMenu(m, anchor) {
     items.push(item);
   };
   if (m.kind === 'text' && m.body) {
-    add('copy', 'Copy text', () => copyText(plainText(m)));
+    add('copy', 'Copy text', () => copyText(toUnicode(messagePieces(m))));
   }
   if (canReplyTo(m)) {
     add('reply', 'Reply', () => startReply(m));
@@ -6102,7 +6088,8 @@ function insertPlain(text) {
   const length = readCompose().length;
   const start = at?.start ?? length;
   const end = at?.end ?? length;
-  spliceCompose(start, end, charsOf(text));
+  // Unicode-styled text comes in as Signal's styles (decision F33).
+  spliceCompose(start, end, charsFromUnicode(text));
   onComposeInput();
 }
 
@@ -6941,6 +6928,285 @@ function pickMention(member) {
   ]);
 }
 
+// --- styled text: markdown shortcuts and Unicode copies (decision F33) -----------
+
+// Typing *bold*, _italic_, ~strikethrough~ or `monospace` applies Signal's
+// own style as the closing mark goes in; nested marks combine, so _*both*_
+// is bold italic. Backspace right after takes it back to the typed marks.
+const MARKDOWN_STYLE = {
+  '*': 'bold',
+  _: 'italic',
+  '~': 'strikethrough',
+  '`': 'monospace',
+};
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+// What the last conversion replaced, so Backspace can restore it.
+let markdownUndo = null;
+// The caret just after a conversion: the next character typed there is
+// plain, not a continuation of the styled text before it.
+let markdownCaret = null;
+
+function applyMarkdown() {
+  const at = selectionOffsets();
+  if (!at || at.start !== at.end) {
+    return false;
+  }
+  const chars = readCompose();
+  const close = at.start - 1;
+  const mark = chars[close];
+  const style = mark && !mark.mention && MARKDOWN_STYLE[mark.ch];
+  if (!style) {
+    return false;
+  }
+  let open = close - 1;
+  while (open >= 0 && chars[open].ch !== '\n' && chars[open].ch !== mark.ch) {
+    open -= 1;
+  }
+  if (open < 0 || chars[open].ch !== mark.ch || chars[open].mention) {
+    return false;
+  }
+  const inner = chars.slice(open + 1, close);
+  const before = chars[open - 1];
+  if (
+    inner.length === 0 ||
+    /\s/.test(inner[0].ch) ||
+    /\s/.test(inner.at(-1).ch) ||
+    (before && !before.mention && WORD_CHAR.test(before.ch))
+  ) {
+    return false;
+  }
+  const styled = inner.map(c => ({
+    ...c,
+    styles: new Set([...c.styles, style]),
+  }));
+  const next = [...chars.slice(0, open), ...styled, ...chars.slice(close + 1)];
+  drawCompose(next);
+  const caret = close - 1;
+  selectOffsets(caret);
+  markdownUndo = { chars, caret, restore: at.start };
+  markdownCaret = caret;
+  return true;
+}
+
+function undoMarkdown() {
+  const at = selectionOffsets();
+  if (!markdownUndo || !at || at.start !== at.end) {
+    return false;
+  }
+  if (at.start !== markdownUndo.caret) {
+    markdownUndo = null;
+    return false;
+  }
+  const { chars, restore } = markdownUndo;
+  markdownUndo = null;
+  markdownCaret = null;
+  drawCompose(chars);
+  selectOffsets(restore);
+  return true;
+}
+
+// Unicode's mathematical letters: styled text that survives being pasted
+// anywhere, an SMS included. Copies use the sans-serif set, which reads like
+// the text around it; pastes also understand the serif set.
+const UNICODE_SETS = [
+  { styles: ['bold'], upper: 0x1d5d4, lower: 0x1d5ee, digit: 0x1d7ec },
+  { styles: ['italic'], upper: 0x1d608, lower: 0x1d622 },
+  { styles: ['bold', 'italic'], upper: 0x1d63c, lower: 0x1d656 },
+  { styles: ['monospace'], upper: 0x1d670, lower: 0x1d68a, digit: 0x1d7f6 },
+  { styles: [], upper: 0x1d5a0, lower: 0x1d5ba, digit: 0x1d7e2 },
+  { styles: ['bold'], upper: 0x1d400, lower: 0x1d41a, digit: 0x1d7ce },
+  { styles: ['italic'], upper: 0x1d434, lower: 0x1d44e },
+  { styles: ['bold', 'italic'], upper: 0x1d468, lower: 0x1d482 },
+];
+const STRIKE_MARK = '̶';
+// code point -> { ch, styles }
+const FROM_UNICODE = new Map([[0x210e, { ch: 'h', styles: ['italic'] }]]);
+// The first set listed wins where two share a letter.
+const learn = (code, ch, styles) => {
+  if (!FROM_UNICODE.has(code)) {
+    FROM_UNICODE.set(code, { ch, styles });
+  }
+};
+for (const set of UNICODE_SETS) {
+  for (let i = 0; i < 26; i += 1) {
+    learn(set.upper + i, String.fromCharCode(65 + i), set.styles);
+    learn(set.lower + i, String.fromCharCode(97 + i), set.styles);
+  }
+  for (let i = 0; set.digit && i < 10; i += 1) {
+    learn(set.digit + i, String(i), set.styles);
+  }
+}
+
+function unicodeSet(styles) {
+  if (styles.has('monospace')) {
+    return UNICODE_SETS[3];
+  }
+  if (styles.has('bold') && styles.has('italic')) {
+    return UNICODE_SETS[2];
+  }
+  if (styles.has('bold')) {
+    return UNICODE_SETS[0];
+  }
+  if (styles.has('italic')) {
+    return UNICODE_SETS[1];
+  }
+  return null;
+}
+
+// [{ text, styles: Set }] -> plain text with the styles written in.
+function toUnicode(pieces) {
+  let out = '';
+  for (const { text, styles } of pieces) {
+    const set = unicodeSet(styles);
+    for (const ch of text) {
+      let mapped = ch;
+      if (set && /[A-Z]/.test(ch)) {
+        mapped = String.fromCodePoint(set.upper + ch.charCodeAt(0) - 65);
+      } else if (set && /[a-z]/.test(ch)) {
+        mapped = String.fromCodePoint(set.lower + ch.charCodeAt(0) - 97);
+      } else if (set && /[0-9]/.test(ch)) {
+        // Bold italic uses bold digits; italic has none.
+        const digit =
+          set.digit ?? (styles.has('bold') ? UNICODE_SETS[0].digit : null);
+        mapped = digit ? String.fromCodePoint(digit + Number(ch)) : ch;
+      }
+      out += mapped;
+      if (styles.has('strikethrough') && ch !== '\n') {
+        out += STRIKE_MARK;
+      }
+    }
+  }
+  return out;
+}
+
+// Pasted text: mathematical letters and struck characters become Signal's
+// styles again.
+function charsFromUnicode(text) {
+  const chars = [];
+  for (const c of charsOf(text)) {
+    if (c.ch === STRIKE_MARK && chars.length > 0) {
+      const last = chars.at(-1);
+      last.styles = new Set([...last.styles, 'strikethrough']);
+      continue;
+    }
+    const known = FROM_UNICODE.get(c.ch.codePointAt(0));
+    chars.push(
+      known
+        ? { ch: known.ch, styles: new Set(known.styles) }
+        : { ...c, styles: new Set() }
+    );
+  }
+  return chars;
+}
+
+// A message as styled pieces, with mentions written out.
+function messagePieces(m) {
+  const text = m.body ?? '';
+  const mentions = m.mentions ?? [];
+  const formatting = m.formatting ?? [];
+  const edges = new Set([0, text.length]);
+  for (const r of [...mentions, ...formatting]) {
+    edges.add(Math.max(0, Math.min(text.length, r.start)));
+    edges.add(Math.max(0, Math.min(text.length, r.start + r.length)));
+  }
+  const points = [...edges].sort((a, b) => a - b);
+  const pieces = [];
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const start = points[i];
+    const end = points[i + 1];
+    const styles = new Set(
+      formatting
+        .filter(r => r.start <= start && r.start + r.length >= end)
+        .map(r => r.style)
+    );
+    const mention = mentions.find(
+      r => r.start <= start && r.start + r.length >= end
+    );
+    if (mention) {
+      if (start === mention.start) {
+        pieces.push({ text: `@${mention.title ?? 'Someone'}`, styles });
+      }
+    } else {
+      pieces.push({ text: text.slice(start, end), styles });
+    }
+  }
+  return pieces;
+}
+
+function hasUnicodeStyle(pieces) {
+  return pieces.some(
+    p => p.text && (unicodeSet(p.styles) || p.styles.has('strikethrough'))
+  );
+}
+
+// Selected text in one message: its pieces, styles read from the page.
+function selectedMessagePieces(range) {
+  const bodyOf = node =>
+    (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement)?.closest(
+      '.body'
+    );
+  const body = bodyOf(range.startContainer);
+  if (!body || body !== bodyOf(range.endContainer)) {
+    return null;
+  }
+  const pieces = [];
+  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!range.intersectsNode(node)) {
+      continue;
+    }
+    const from = node === range.startContainer ? range.startOffset : 0;
+    const to = node === range.endContainer ? range.endOffset : node.data.length;
+    const styles = new Set();
+    for (let p = node.parentElement; p && p !== body; p = p.parentElement) {
+      for (const cls of p.classList) {
+        if (CLASS_STYLE[cls] && CLASS_STYLE[cls] !== 'highlight') {
+          styles.add(CLASS_STYLE[cls]);
+        }
+      }
+    }
+    pieces.push({ text: node.data.slice(from, to), styles });
+  }
+  return pieces;
+}
+
+// Selected text in the message box, as pieces.
+function selectedComposePieces() {
+  const at = selectionOffsets();
+  if (!at || at.start === at.end) {
+    return null;
+  }
+  return readCompose()
+    .slice(at.start, at.end)
+    .map(c => ({
+      text: c.mention ? `@${c.mention.title ?? 'Someone'}` : c.ch,
+      styles: c.styles,
+    }));
+}
+
+function copyStyled(e, { cut = false } = {}) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+    return;
+  }
+  const inCompose = composeBox().contains(sel.anchorNode);
+  const pieces = inCompose
+    ? selectedComposePieces()
+    : selectedMessagePieces(sel.getRangeAt(0));
+  if (!pieces || !hasUnicodeStyle(pieces)) {
+    return;
+  }
+  e.preventDefault();
+  e.clipboardData.setData('text/plain', toUnicode(pieces));
+  if (cut && inCompose) {
+    const at = selectionOffsets();
+    spliceCompose(at.start, at.end, []);
+    composeBox().dispatchEvent(new Event('input'));
+  }
+}
+document.addEventListener('copy', e => copyStyled(e));
+document.addEventListener('cut', e => copyStyled(e, { cut: true }));
+
 // --- message box events ----------------------------------------------------------
 // The message box, and the forward dialog's (decision F32), share all of
 // this; composeBox() is whichever one is being edited.
@@ -6951,6 +7217,18 @@ function wireComposeBox(box, onInput) {
   if (box.contentEditable !== 'plaintext-only') {
     box.contentEditable = 'true';
   }
+  box.addEventListener('input', e => {
+    if (
+      e.inputType === 'insertText' &&
+      MARKDOWN_STYLE[e.data] &&
+      !e.isComposing &&
+      applyMarkdown()
+    ) {
+      return;
+    }
+    markdownUndo = null;
+    markdownCaret = null;
+  });
   box.addEventListener('input', onInput);
   box.addEventListener('blur', () => {
     closeMentionPicker();
@@ -6960,6 +7238,27 @@ function wireComposeBox(box, onInput) {
     // The browser's own bold and the like would bypass Signal's styles.
     if (e.inputType.startsWith('format')) {
       e.preventDefault();
+      return;
+    }
+    // Typing right after a markdown conversion starts plain text.
+    const at = selectionOffsets();
+    if (
+      e.inputType === 'insertText' &&
+      e.data &&
+      !e.isComposing &&
+      markdownCaret !== null &&
+      at?.start === markdownCaret &&
+      at.end === markdownCaret
+    ) {
+      e.preventDefault();
+      markdownUndo = null;
+      markdownCaret = null;
+      spliceCompose(at.start, at.end, charsOf(e.data));
+      if (!MARKDOWN_STYLE[e.data] || !applyMarkdown()) {
+        markdownUndo = null;
+        markdownCaret = null;
+      }
+      onInput();
     }
   });
   box.addEventListener('contextmenu', e => {
@@ -7010,6 +7309,12 @@ function wireComposeBox(box, onInput) {
         e.preventDefault();
         e.stopImmediatePropagation();
         insertPlain('\n');
+        return;
+      }
+      if (e.key === 'Backspace' && !e.ctrlKey && !e.altKey && undoMarkdown()) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        onInput();
         return;
       }
       if (!(e.ctrlKey || e.metaKey) || e.altKey) {
