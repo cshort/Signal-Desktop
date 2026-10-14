@@ -646,6 +646,43 @@ export class FakeBridge {
           ),
         });
         return;
+      case 'media.list': {
+        // Newest first; a cursor is the index of the next message.
+        const list = [...(this.messages.get(params.conversationId) ?? [])].sort(
+          (a, b) => b.sentAt - a.sentAt
+        );
+        const start = params.cursor ? Number(params.cursor.split('.')[0]) : 0;
+        const kindOf = a => {
+          const type = a.contentType.split('/')[0];
+          if (a.isVoiceMessage || type === 'audio') {
+            return 'audio';
+          }
+          return type === 'image' || type === 'video' ? 'media' : 'files';
+        };
+        const items = [];
+        const messages = [];
+        let next = null;
+        for (let i = start; i < list.length; i += 1) {
+          const m = list[i];
+          const found =
+            params.kind === 'links'
+              ? (m.previews ?? []).map((_, index) => index)
+              : (m.attachments ?? []).flatMap((a, index) =>
+                  kindOf(a) === params.kind ? [index] : []
+                );
+          if (found.length === 0) {
+            continue;
+          }
+          if (items.length + found.length > (params.limit ?? 50)) {
+            next = `${i}.0`;
+            break;
+          }
+          items.push(...found.map(index => ({ messageId: m.id, index })));
+          messages.push(m);
+        }
+        this.#reply(session, id, { items, messages, nextCursor: next });
+        return;
+      }
       case 'linkPreviews.fetch': {
         const url = (params.text.match(/https:\/\/\S+/g) ?? []).find(
           link => !(params.exclude ?? []).includes(link)

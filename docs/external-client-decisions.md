@@ -836,3 +836,24 @@ neighbouring photos load ahead. Page only.
 WHY: Mike asked (2026-10-13 14:56 PT). Signal's viewer also pages on
 through the rest of the chat's media; that needs the media gallery, which
 is still missing, so it comes with that.
+
+## F31. Fork only: all media
+
+DECISION: `media.list {conversationId, kind, cursor?, limit?}` (under
+`messages.read`) lists a chat's photos and videos, audio, files or links,
+newest first, with Signal's own media-gallery queries (getSortedMedia,
+getSortedDocuments without shared contacts, getSortedNonAttachmentMedia
+for links). Items are `{messageId, index}` (the attachment's, or the
+preview's for links) with the messages they're in, as `messages.list`
+gives them, so the page reuses its thumbnails, players, files and link
+cards. Pages end on whole messages: the cursor is a message's received and
+sent times, as Signal's loadMore uses. The page's "All media" (chat menu
+and details) has Signal's tabs (Media, Audio, Links, Files) grouped by
+month, with "Show in chat" on every item and in the viewer.
+
+The viewer opened from the gallery steps only through that message's
+photos, as from the chat (F30), not across the chat's media as Signal's
+does: Mike's preference (2026-10-13 17:05 PT).
+
+WHY: Mike asked (2026-10-13 17:05 PT); it was the largest missing view on
+the parity list.

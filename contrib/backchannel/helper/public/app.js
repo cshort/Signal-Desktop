@@ -168,6 +168,8 @@ const ICONS = {
     'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z',
   back: 'M15 5l-7 7 7 7',
   next: 'M9 5l7 7-7 7',
+  media: 'M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9h.01',
+  goto: 'M5 12h14M13 6l6 6-6 6',
   down: 'M12 5v14M5 12l7 7 7-7',
   bell: 'M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0',
   mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3',
@@ -1811,7 +1813,13 @@ function lightboxItems(m) {
 
 function openLightbox(m, index) {
   const items = lightboxItems(m);
-  lightbox = { m, items, pos: Math.max(0, items.indexOf(index)) };
+  lightbox = {
+    m,
+    items,
+    pos: Math.max(0, items.indexOf(index)),
+    gallery: null,
+  };
+  $('lightbox-goto').hidden = true;
   renderLightboxStrip();
   showLightboxItem();
   $('lightbox').hidden = false;
@@ -1907,6 +1915,206 @@ function closeLightbox() {
   $('lightbox').hidden = true;
   $('lightbox-stage').replaceChildren();
   $('lightbox-strip').replaceChildren();
+}
+
+// --- all media (decision F31) ---------------------------------------------------
+
+// As Signal's "All media": a chat's photos and videos, voice notes and
+// audio, links and files, newest first, by month. A photo opens in the
+// viewer, which steps only through that message's (Mike's preference).
+const GALLERY_TABS = [
+  ['media', 'Media'],
+  ['audio', 'Audio'],
+  ['links', 'Links'],
+  ['files', 'Files'],
+];
+let gallery = null;
+
+function openGallery(conversationId) {
+  const c = conversations.get(conversationId);
+  if (!c) {
+    return;
+  }
+  closePopovers();
+  closeDetails();
+  gallery = { conversationId, kind: 'media' };
+  $('gallery-title').textContent = `All media · ${displayTitle(c)}`;
+  $('gallery').hidden = false;
+  showGalleryTab('media');
+}
+
+function closeGallery() {
+  gallery = null;
+  $('gallery').hidden = true;
+  $('gallery-body').replaceChildren();
+}
+
+function showGalleryTab(kind) {
+  gallery = {
+    conversationId: gallery.conversationId,
+    kind,
+    items: [],
+    messages: new Map(),
+    cursor: null,
+    done: false,
+    loading: false,
+    seq: (gallery.seq ?? 0) + 1,
+  };
+  for (const tab of $('gallery-tabs').querySelectorAll('button')) {
+    tab.classList.toggle('active', tab.dataset.kind === kind);
+  }
+  $('gallery-body').replaceChildren();
+  $('gallery-body').scrollTop = 0;
+  loadGalleryPage();
+}
+
+async function loadGalleryPage() {
+  const g = gallery;
+  if (!g || g.loading || g.done) {
+    return;
+  }
+  g.loading = true;
+  const params = new URLSearchParams({
+    conversationId: g.conversationId,
+    kind: g.kind,
+    ...(g.cursor ? { cursor: g.cursor } : {}),
+  });
+  try {
+    const page = await api(`api/media?${params}`);
+    if (gallery?.seq !== g.seq) {
+      return;
+    }
+    for (const m of page.messages) {
+      g.messages.set(m.id, m);
+    }
+    g.items.push(...page.items);
+    g.cursor = page.nextCursor;
+    g.done = !page.nextCursor;
+  } catch (error) {
+    g.done = true;
+    toast(`Couldn't load media (${error.code ?? error.message}).`);
+  } finally {
+    g.loading = false;
+  }
+  renderGallery();
+  // Fill the window before waiting for a scroll.
+  const body = $('gallery-body');
+  if (!g.done && body.scrollHeight <= body.clientHeight + 200) {
+    loadGalleryPage();
+  }
+}
+
+function galleryMonth(ms) {
+  const d = new Date(ms);
+  const now = new Date();
+  if (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth()
+  ) {
+    return 'This month';
+  }
+  return d.toLocaleDateString([], {
+    month: 'long',
+    ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+  });
+}
+
+function galleryShowInChat(m) {
+  const button = el('button', 'icon-button gallery-goto');
+  button.type = 'button';
+  button.title = 'Show in chat';
+  button.setAttribute('aria-label', 'Show in chat');
+  button.append(icon('goto'));
+  button.addEventListener('click', ev => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    closeGallery();
+    jumpToMessage(m);
+  });
+  return button;
+}
+
+function galleryRow(m, kind, index) {
+  const row = el('div', `gallery-row gallery-${kind}`);
+  const meta = el(
+    'div',
+    'gallery-meta sub',
+    `${m.direction === 'outgoing' ? 'You' : nameOf(m.authorConversationId)} · ${formatTime(m.sentAt)}`
+  );
+  if (kind === 'audio') {
+    const a = m.attachments[index];
+    row.append(
+      el(
+        'div',
+        'gallery-row-name',
+        a.isVoiceMessage ? 'Voice message' : (a.fileName ?? 'Audio')
+      ),
+      renderAudio(m, a, index),
+      meta
+    );
+  } else if (kind === 'files') {
+    row.append(renderFile(m, m.attachments[index], index), meta);
+  } else {
+    const card = renderLinkPreview(m, m.previews[index], index);
+    card.append(el('span', 'gallery-url', m.previews[index].url));
+    row.append(card, meta);
+  }
+  row.append(galleryShowInChat(m));
+  return row;
+}
+
+function renderGallery() {
+  const g = gallery;
+  const body = $('gallery-body');
+  const scroll = body.scrollTop;
+  const sections = [];
+  let current = null;
+  for (const item of g.items) {
+    const m = g.messages.get(item.messageId);
+    if (!m) {
+      continue;
+    }
+    const month = galleryMonth(m.sentAt);
+    if (current?.month !== month) {
+      const list = el(
+        'div',
+        g.kind === 'media' ? 'gallery-grid' : 'gallery-list'
+      );
+      current = { month, list };
+      sections.push(el('h3', 'gallery-month', month), list);
+    }
+    if (g.kind === 'media') {
+      const tile = renderVisual(m, m.attachments[item.index], item.index, true);
+      tile.classList.add('gallery-tile');
+      tile.addEventListener('click', () => {
+        if (lightbox) {
+          lightbox.gallery = m;
+          $('lightbox-goto').hidden = false;
+        }
+      });
+      current.list.append(tile);
+    } else {
+      current.list.append(galleryRow(m, g.kind, item.index));
+    }
+  }
+  if (sections.length === 0) {
+    sections.push(
+      el(
+        'p',
+        'gallery-empty sub',
+        g.done
+          ? {
+              media: 'No photos or videos in this chat',
+              audio: 'No audio in this chat',
+              links: 'No links in this chat',
+              files: 'No files in this chat',
+            }[g.kind]
+          : 'Loading…'
+      )
+    );
+  }
+  body.replaceChildren(...sections);
+  body.scrollTop = scroll;
 }
 
 // --- message text: mentions, formatting, links ----------------------------------
@@ -2538,6 +2746,7 @@ function openChatMenu(conversationId, anchor, page = null) {
         openDetails(c.id)
       );
       add('search', 'Search in chat', () => startChatSearch(c.id));
+      add('media', 'All media', () => openGallery(c.id));
       items.push(el('div', 'menu-separator'));
     }
     if (!blocked && !c.messageRequestPending) {
@@ -2886,6 +3095,12 @@ function renderDetails(c, d) {
     });
     rows.push(el('div', 'details-actions'));
     rows.at(-1).append(message);
+  }
+  if (conversations.has(c.id)) {
+    const media = detailRow('media', 'All media');
+    media.classList.add('clickable');
+    media.addEventListener('click', () => openGallery(c.id));
+    rows.push(media);
   }
   if (conversations.has(c.id) && (!c.noteToSelf || canManageChats())) {
     const options = el('button', 'setting-button', 'Chat options');
@@ -7625,6 +7840,45 @@ $('compose-preview-close').addEventListener('click', dismissLinkPreview);
 $('lightbox-close').append(icon('close'));
 $('lightbox-save').append(icon('download'));
 $('lightbox-close').addEventListener('click', closeLightbox);
+$('lightbox-goto').append(icon('goto'));
+$('lightbox-goto').addEventListener('click', () => {
+  const m = lightbox?.gallery;
+  if (m) {
+    closeLightbox();
+    closeGallery();
+    jumpToMessage(m);
+  }
+});
+$('gallery-close').append(icon('close'));
+$('gallery-close').addEventListener('click', closeGallery);
+$('gallery').addEventListener('click', e => {
+  if (e.target === $('gallery')) {
+    closeGallery();
+  }
+});
+$('gallery-tabs').replaceChildren(
+  ...GALLERY_TABS.map(([kind, label]) => {
+    const tab = el('button', 'gallery-tab', label);
+    tab.type = 'button';
+    tab.dataset.kind = kind;
+    tab.addEventListener('click', () => {
+      if (gallery && gallery.kind !== kind) {
+        showGalleryTab(kind);
+      }
+    });
+    return tab;
+  })
+);
+$('gallery-body').addEventListener(
+  'scroll',
+  () => {
+    const body = $('gallery-body');
+    if (body.scrollHeight - body.scrollTop - body.clientHeight < 300) {
+      loadGalleryPage();
+    }
+  },
+  { passive: true }
+);
 $('lightbox-prev').append(icon('back'));
 $('lightbox-next').append(icon('next'));
 $('lightbox-prev').addEventListener('click', () => stepLightbox(-1));
@@ -7679,8 +7933,13 @@ document.addEventListener('keydown', e => {
   }
   if (e.key === 'Escape') {
     closePopovers();
-    closeLightbox();
-    if (!$('schedule').hidden) {
+    if (lightbox) {
+      closeLightbox();
+      return;
+    }
+    if (!$('gallery').hidden) {
+      closeGallery();
+    } else if (!$('schedule').hidden) {
       closeSchedule();
     } else if (!$('scheduled').hidden) {
       closeScheduledList();

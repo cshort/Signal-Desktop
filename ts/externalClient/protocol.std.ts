@@ -169,6 +169,7 @@ export const Method = {
   GroupsUpdate: 'groups.update',
   MessagesLocateQuote: 'messages.locateQuote',
   LinkPreviewsFetch: 'linkPreviews.fetch',
+  MediaList: 'media.list',
 } as const;
 export type MethodType = (typeof Method)[keyof typeof Method];
 
@@ -217,6 +218,7 @@ export const SERVICE_METHOD_CAPABILITIES = {
   [Method.MessagesLocateQuote]: Capability.MessagesRead,
   // Part of writing a message, as in Signal's composer.
   [Method.LinkPreviewsFetch]: Capability.MessagesSend,
+  [Method.MediaList]: Capability.MessagesRead,
 } as const satisfies Partial<Record<MethodType, CapabilityType>>;
 export type ServiceMethodType = keyof typeof SERVICE_METHOD_CAPABILITIES;
 
@@ -1264,6 +1266,48 @@ export type MessagesSearchResultType = Readonly<{
   results: ReadonlyArray<SearchResultDTO>;
 }>;
 
+// Fork addition (decision F31): a chat's media, files, voice notes and
+// links, newest first, as Signal's "All media" view lists them.
+export const MediaKind = {
+  Media: 'media',
+  Audio: 'audio',
+  Files: 'files',
+  Links: 'links',
+} as const;
+export type MediaKindType = (typeof MediaKind)[keyof typeof MediaKind];
+
+export const mediaListParamsSchema = z
+  .object({
+    conversationId: conversationIdSchema,
+    kind: z.enum([
+      MediaKind.Media,
+      MediaKind.Audio,
+      MediaKind.Files,
+      MediaKind.Links,
+    ]),
+    limit: z.number().int().min(1).max(LIMITS.maxMessagePage).optional(),
+    // Opaque to clients: pass back `nextCursor` to page further back.
+    cursor: z
+      .string()
+      .regex(/^\d{1,16}\.\d{1,16}$/)
+      .optional(),
+  })
+  .strict();
+export type MediaListParamsType = z.infer<typeof mediaListParamsSchema>;
+
+export type MediaItemDTO = Readonly<{
+  messageId: string;
+  // The attachment's index in the message, or for links the preview's.
+  index: number;
+}>;
+
+export type MediaListResultType = Readonly<{
+  items: ReadonlyArray<MediaItemDTO>;
+  // The messages the items are in, once each.
+  messages: ReadonlyArray<MessageDTO>;
+  nextCursor: string | null;
+}>;
+
 // Fork additions: Signal's compose button (decision F20). contacts.list is
 // the people its "New chat" and "New group" lists offer.
 export const contactsListParamsSchema = z
@@ -1476,6 +1520,7 @@ export const SERVICE_PARAM_SCHEMAS = {
   [Method.GroupsUpdate]: groupsUpdateParamsSchema,
   [Method.MessagesLocateQuote]: messagesLocateQuoteParamsSchema,
   [Method.LinkPreviewsFetch]: linkPreviewsFetchParamsSchema,
+  [Method.MediaList]: mediaListParamsSchema,
 } as const satisfies Record<ServiceMethodType, z.ZodType>;
 
 export type ConversationsListParamsType = z.infer<

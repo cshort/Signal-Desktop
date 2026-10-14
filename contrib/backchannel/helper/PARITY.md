@@ -37,7 +37,7 @@ Last reviewed: 2026-10-13, against the Signal release in fork main.
 | Quoted replies with thumbnails, jump to the original     | done      | F1, F13, F25                                         |
 | Edit and delete (for me, for everyone)                   | done      | F3                                                   |
 | Photos, videos, GIFs, files, voice notes (play)          | done      | F2                                                   |
-| Viewer: arrows, keys, swipe, thumbnail strip             | partial   | F30: one message; Signal pages the chat              |
+| Viewer: arrows, keys, swipe, thumbnail strip             | different | F30: one message, by choice; Signal pages the chat   |
 | Long messages                                            | done      |                                                      |
 | Polls (vote, end, create, send to many chats)            | done      | F6                                                   |
 | Stickers (view and send)                                 | done      | F10                                                  |
@@ -55,7 +55,7 @@ Last reviewed: 2026-10-13, against the Signal release in fork main.
 | Contact card from a group member's photo or name         | done      | F23: About and Message                               |
 | Reply privately to a group message                       | different | F23: beyond Signal; links both ways on this page     |
 | Per-chat settings: timer, mute, block, colors, nickname  | partial   | F15: timer, mute, block; colors and nickname missing |
-| Media, files and links gallery                           | missing   |                                                      |
+| Media, files, audio and links gallery                    | done      | F31: viewer steps within one message                 |
 | Search inside a chat                                     | done      | F17                                                  |
 | Group management (add/remove, admins, link, name, photo) | done      | F21: also requests, invites, permissions, leave      |
 | Poll-ended and other system notices                      | partial   |                                                      |

@@ -524,6 +524,30 @@ describe('backchannel helper', () => {
     assert.deepEqual(call.params, { messageId: 'm1', preview: 0 });
   });
 
+  it("lists a chat's media for the gallery", async () => {
+    const conversationId = bridge.conversations[0].id;
+    const res = await http(port, {
+      path: `/${helper.token}/api/media?${new URLSearchParams({
+        conversationId,
+        kind: 'media',
+        cursor: '12.34',
+      })}`,
+    });
+    assert.equal(res.status, 200);
+    const call = bridge.calls.findLast(c => c.method === 'media.list');
+    assert.deepEqual(call.params, {
+      conversationId,
+      kind: 'media',
+      limit: 60,
+      cursor: '12.34',
+    });
+    assert.deepEqual(Object.keys(JSON.parse(res.text)).sort(), [
+      'items',
+      'messages',
+      'nextCursor',
+    ]);
+  });
+
   it('asks Signal for link previews and sends the one shown', async () => {
     bridge.linkPreviews.set('https://example.com/a', {
       title: 'Example',

@@ -827,6 +827,20 @@ export function createWebServer({
       );
       return;
     }
+    if (req.method === 'GET' && route === 'api/media') {
+      const cursor = url.searchParams.get('cursor');
+      sendJson(
+        res,
+        200,
+        await bridge.call('media.list', {
+          conversationId: url.searchParams.get('conversationId'),
+          kind: url.searchParams.get('kind'),
+          limit: 60,
+          ...(cursor ? { cursor } : {}),
+        })
+      );
+      return;
+    }
     if (req.method === 'GET' && route === 'api/messages') {
       const conversationId = url.searchParams.get('conversationId');
       const cursor = url.searchParams.get('cursor') ?? undefined;

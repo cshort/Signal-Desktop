@@ -18,6 +18,7 @@ import {
   messagesForwardParamsSchema,
   messagesSendStickerParamsSchema,
   linkPreviewsFetchParamsSchema,
+  mediaListParamsSchema,
   messagesSendTextParamsSchema,
   negotiateVersion,
   MAX_FORMATTING_RANGES,
@@ -364,6 +365,30 @@ describe('externalClient/protocol', () => {
       assert.isFalse(ok({ action: 'mute', durationMs: 5 }));
       assert.isFalse(ok({ action: 'leaveGroup' }));
       assert.isFalse(ok({ action: 'disappearingMessages', seconds: -1 }));
+    });
+
+    it('lists media by kind with an opaque cursor', () => {
+      const conversationId = '0b9e2c1a-1111-4222-8333-944455556666';
+      assert.isTrue(
+        accepts(mediaListParamsSchema, { conversationId, kind: 'media' })
+      );
+      assert.isTrue(
+        accepts(mediaListParamsSchema, {
+          conversationId,
+          kind: 'links',
+          cursor: '1700000000000.1700000000001',
+        })
+      );
+      assert.isFalse(
+        accepts(mediaListParamsSchema, { conversationId, kind: 'stickers' })
+      );
+      assert.isFalse(
+        accepts(mediaListParamsSchema, {
+          conversationId,
+          kind: 'files',
+          cursor: "1' OR 1=1",
+        })
+      );
     });
 
     it('takes text for a link preview and a preview url on send', () => {

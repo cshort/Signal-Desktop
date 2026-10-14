@@ -219,6 +219,26 @@
       hidden
     ></div>
     <div class="toast" id="toast" role="status" hidden></div>
+    <div class="modal-backdrop" id="gallery" hidden>
+      <div
+        class="modal gallery-modal"
+        role="dialog"
+        aria-labelledby="gallery-title"
+      >
+        <div class="modal-head">
+          <span id="gallery-title">All media</span>
+          <button
+            type="button"
+            class="icon-button"
+            id="gallery-close"
+            title="Close"
+            aria-label="Close"
+          ></button>
+        </div>
+        <div class="gallery-tabs" id="gallery-tabs" role="tablist"></div>
+        <div class="gallery-body" id="gallery-body"></div>
+      </div>
+    </div>
     <div class="modal-backdrop" id="schedule" hidden>
       <div class="modal" role="dialog" aria-labelledby="schedule-title">
         <div class="modal-head">
@@ -442,6 +462,14 @@
     <div class="lightbox" id="lightbox" hidden>
       <div class="lightbox-bar">
         <span class="lightbox-count" id="lightbox-count"></span>
+        <button
+          type="button"
+          class="icon-button"
+          id="lightbox-goto"
+          title="Show in chat"
+          aria-label="Show in chat"
+          hidden
+        ></button>
         <a
           class="icon-button"
           id="lightbox-save"
